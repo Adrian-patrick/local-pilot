@@ -144,13 +144,38 @@ class LocalPilotPopup:
         )
         self.summary_label.grid(row=2, column=0, sticky="ew", pady=(4, 0))
 
+        actions = tk.Frame(shell, bg=self.colors["bg"])
+        actions.grid(row=2, column=0, sticky="ew", pady=(0, 12))
+        actions.columnconfigure(4, weight=1)
+
+        quick_actions = [
+            ("Summary", "Summarize this document in 5 concise bullets."),
+            ("Skills", "List the skills mentioned in this document."),
+            ("Projects", "List all projects mentioned in this document with one-line descriptions."),
+            ("Experience", "Summarize the experience mentioned in this document."),
+        ]
+        for index, (label, prompt) in enumerate(quick_actions):
+            tk.Button(
+                actions,
+                text=label,
+                font=("Segoe UI", 9, "bold"),
+                fg=self.colors["brand"],
+                bg="#eef4ff",
+                activebackground="#dbeafe",
+                activeforeground=self.colors["brand_dark"],
+                relief=tk.FLAT,
+                padx=12,
+                pady=7,
+                command=lambda value=prompt: self._ask_prompt(value),
+            ).grid(row=0, column=index, sticky="w", padx=(0, 8))
+
         chat_panel = tk.Frame(
             shell,
             bg=self.colors["panel"],
             highlightbackground=self.colors["border"],
             highlightthickness=1,
         )
-        chat_panel.grid(row=2, column=0, sticky="nsew", pady=(0, 12))
+        chat_panel.grid(row=3, column=0, sticky="nsew", pady=(0, 12))
         chat_panel.columnconfigure(0, weight=1)
         chat_panel.rowconfigure(0, weight=1)
 
@@ -177,7 +202,7 @@ class LocalPilotPopup:
             padx=12,
             pady=10,
         )
-        input_card.grid(row=3, column=0, sticky="ew")
+        input_card.grid(row=4, column=0, sticky="ew")
         input_card.columnconfigure(0, weight=1)
 
         self.question = tk.Text(
@@ -204,7 +229,7 @@ class LocalPilotPopup:
         self.ask_button.grid(row=0, column=1, sticky="ns")
 
         footer = tk.Frame(shell, bg=self.colors["bg"])
-        footer.grid(row=4, column=0, sticky="ew", pady=(8, 0))
+        footer.grid(row=5, column=0, sticky="ew", pady=(8, 0))
         footer.columnconfigure(0, weight=1)
 
         self.status = tk.Label(
@@ -244,13 +269,19 @@ class LocalPilotPopup:
         if not question:
             return "break"
 
+        self._submit_question(question)
+        return "break"
+
+    def _ask_prompt(self, prompt: str) -> None:
+        self._submit_question(prompt)
+
+    def _submit_question(self, question: str) -> None:
         self.question.delete("1.0", tk.END)
         self._append("You", question)
         self._set_busy(True)
 
         thread = threading.Thread(target=self._answer_in_background, args=(question,), daemon=True)
         thread.start()
-        return "break"
 
     def _answer_in_background(self, question: str) -> None:
         try:

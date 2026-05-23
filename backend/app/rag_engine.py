@@ -41,10 +41,11 @@ def answer_workspace(paths: list[str], question: str) -> dict:
 
     if not retrieved:
         answer = "I don't see readable content in the selected workspace."
-        sources = context["sources"]
+        sources = workspace["paths"]
     else:
         answer, validation = _generate_corrected_answer(question, retrieved, history, workspace)
         sources = sorted({chunk["source"] for chunk in retrieved})
+        answer = _append_source_note(answer, retrieved)
 
     with connect() as con:
         primary_item_id = workspace["item_ids"][0]
@@ -208,7 +209,10 @@ def _build_grounded_prompt(
         "If the answer is present, answer directly and do not add uncertainty disclaimers.\n"
         "If the answer is not present in the selected files, say: "
         "\"I don't see that in the selected workspace.\"\n"
-        "When possible, mention the source file.\n\n"
+        "When possible, mention the source file.\n"
+        "For list questions about projects, skills, experience, tools, education, or achievements, "
+        "return a clear bullet list with short evidence from the context.\n"
+        "Do not stop after the first matching item if the context contains more.\n\n"
         f"Workspace: {workspace['title']}\n"
         f"Selection type: {workspace['selection_type']}\n"
         f"Selected paths:\n{_format_paths(workspace['paths'])}\n\n"
@@ -232,6 +236,18 @@ def _format_chunks(chunks: list[dict]) -> str:
         lines.append(block)
         total += len(block)
     return "\n\n---\n\n".join(lines)
+
+
+def _append_source_note(answer: str, chunks: list[dict]) -> str:
+    sources = []
+    for chunk in chunks[:3]:
+        source = chunk["source"]
+        label = f"{source} (chunk {chunk['chunk_index']})"
+        if label not in sources:
+            sources.append(label)
+    if not sources:
+        return answer
+    return answer.rstrip() + "\n\nSources used:\n" + "\n".join(f"- {source}" for source in sources)
 
 
 def _format_history(history: list[dict]) -> str:
