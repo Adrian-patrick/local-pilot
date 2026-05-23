@@ -7,6 +7,20 @@ from .schemas import AskRequest, AskResponse, ContextResponse
 app = FastAPI(title="Local Pilot", version="0.1.0")
 
 
+@app.get("/")
+def root() -> dict:
+    return {
+        "app": "Local Pilot",
+        "status": "running",
+        "routes": {
+            "health": "/health",
+            "api_docs": "/docs",
+            "context": "/context?path=.",
+            "ask": "POST /ask",
+        },
+    }
+
+
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok", "app": "Local Pilot"}
@@ -34,4 +48,3 @@ def ask(request: AskRequest) -> dict:
         return answer_question(request.path, request.question)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-
