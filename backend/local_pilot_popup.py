@@ -149,10 +149,22 @@ class LocalPilotPopup:
         actions.columnconfigure(4, weight=1)
 
         quick_actions = [
-            ("Summary", "Summarize this document in 5 concise bullets."),
-            ("Skills", "List the skills mentioned in this document."),
-            ("Projects", "List all projects mentioned in this document with one-line descriptions."),
-            ("Experience", "Summarize the experience mentioned in this document."),
+            (
+                "Summary",
+                "Give a concise profile summary in 5 bullets. Focus on who the person is, core strengths, experience, projects, and education/research if present.",
+            ),
+            (
+                "Skills",
+                "Extract only technical and professional skills from this document. Group them under: Programming, AI/ML, Frameworks/Libraries, Cloud/MLOps, Tools. Do not include project names, company names, dates, papers, links, or certifications as skills.",
+            ),
+            (
+                "Projects",
+                "List only actual project names from this document with one-line descriptions. Do not list tools, skills, companies, datasets, papers, dates, or links as projects.",
+            ),
+            (
+                "Experience",
+                "Summarize only work, internship, and research experience from this document. Include role, organization, timeframe if present, and what was done.",
+            ),
         ]
         for index, (label, prompt) in enumerate(quick_actions):
             tk.Button(

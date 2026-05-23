@@ -33,6 +33,7 @@ def answer_with_rag(path: str, question: str) -> dict:
 def answer_workspace(paths: list[str], question: str) -> dict:
     contexts = [collect_context(path) for path in paths]
     workspace = _ensure_workspace(contexts)
+    extracted_text = "\n\n".join(context.get("text") or "" for context in contexts)
 
     with connect() as con:
         chunks = load_workspace_chunks(con, workspace["id"])
@@ -43,7 +44,11 @@ def answer_workspace(paths: list[str], question: str) -> dict:
         answer = "I don't see readable content in the selected workspace."
         sources = workspace["paths"]
     else:
-        answer, validation = _generate_corrected_answer(question, retrieved, history, workspace)
+        extracted_answer = _deterministic_answer(question, chunks, extracted_text)
+        if extracted_answer:
+            answer = extracted_answer
+        else:
+            answer, validation = _generate_corrected_answer(question, retrieved, history, workspace)
         sources = sorted({chunk["source"] for chunk in retrieved})
         answer = _append_source_note(answer, retrieved)
 
@@ -165,6 +170,135 @@ def retrieve_chunks(question: str, chunks: list[dict], top_k: int = TOP_K) -> li
     return ranked[:top_k]
 
 
+def _deterministic_answer(question: str, chunks: list[dict], extracted_text: str = "") -> str | None:
+    lowered = question.lower()
+    text = extracted_text or "\n".join(chunk["text"] for chunk in chunks)
+    is_project_request = "project" in lowered and not lowered.startswith("extract only technical")
+    if is_project_request:
+        return _deterministic_projects(text)
+    if "skill" in lowered:
+        return _deterministic_skills(text)
+    if "experience" in lowered:
+        return _deterministic_experience(text)
+
+
+def _deterministic_projects(text: str) -> str | None:
+    project_section = _section_between(
+        text,
+        start_markers=("Projects",),
+        end_markers=("Education", "Certifications", "Leadership", "Achievements"),
+    )
+
+    projects = _extract_project_lines(project_section or text)
+    if len(projects) < 2 and project_section:
+        projects = _merge_unique(projects, _extract_project_lines(text))
+    if not projects:
+        return None
+
+    return "Projects mentioned:\n" + "\n".join(f"- {project}" for project in projects)
+
+
+def _deterministic_skills(text: str) -> str | None:
+    section = _section_between(
+        text,
+        start_markers=("Technical Skills", "Skills"),
+        end_markers=("Research", "Experience", "Projects", "Education"),
+    )
+    if not section:
+        return None
+    lines = _clean_section_lines(section, skip_headers=("Technical Skills", "Skills"))
+    if not lines:
+        return None
+    return "Skills mentioned:\n" + "\n".join(f"- {line}" for line in lines[:10])
+
+
+def _deterministic_experience(text: str) -> str | None:
+    research = _section_between(
+        text,
+        start_markers=("Research",),
+        end_markers=("Experience", "Projects", "Education"),
+    )
+    experience = _section_between(
+        text,
+        start_markers=("Experience",),
+        end_markers=("Projects", "Education", "Publication", "Certifications"),
+    )
+    blocks = []
+    if research:
+        blocks.append("Research:\n" + "\n".join(_clean_section_lines(research, skip_headers=("Research",))[:6]))
+    if experience:
+        blocks.append("Experience:\n" + "\n".join(_clean_section_lines(experience, skip_headers=("Experience",))[:10]))
+    if not blocks:
+        return None
+    return "\n\n".join(blocks)
+
+
+def _section_between(text: str, start_markers: tuple[str, ...], end_markers: tuple[str, ...]) -> str:
+    start = _find_heading(text, start_markers)
+    if start < 0:
+        return ""
+
+    end = len(text)
+    for marker in end_markers:
+        marker_index = _find_heading(text[start + 1 :], (marker,))
+        if marker_index >= 0:
+            end = min(end, start + 1 + marker_index)
+    return text[start:end]
+
+
+def _find_heading(text: str, markers: tuple[str, ...]) -> int:
+    for marker in markers:
+        match = re.search(rf"(?im)^\s*{re.escape(marker)}\s*$", text)
+        if match:
+            return match.start()
+    lower = text.lower()
+    starts = [lower.find(marker.lower()) for marker in markers]
+    starts = [index for index in starts if index >= 0]
+    return min(starts) if starts else -1
+
+
+def _extract_project_lines(section: str) -> list[str]:
+    lines = [line.strip(" -*•\t") for line in section.splitlines() if line.strip()]
+    projects: list[str] = []
+
+    for line in lines:
+        lower = line.lower()
+        cleaned = re.sub(r"\s+", " ", line)
+        if len(cleaned) > 160:
+            continue
+        if cleaned.lower() == "projects":
+            continue
+        if not ("[github" in lower or "[live" in lower):
+            continue
+        if lower.startswith(("co-authored", "springer", "publication")):
+            continue
+        if cleaned not in projects:
+            projects.append(cleaned)
+
+    return projects[:8]
+
+
+def _clean_section_lines(section: str, skip_headers: tuple[str, ...] = ()) -> list[str]:
+    lines: list[str] = []
+    for raw in section.splitlines():
+        line = re.sub(r"\s+", " ", raw.strip(" -*•\t"))
+        if not line:
+            continue
+        if any(line.lower() == header.lower() for header in skip_headers):
+            continue
+        if line not in lines:
+            lines.append(line)
+    return lines
+
+
+def _merge_unique(first: list[str], second: list[str]) -> list[str]:
+    merged = list(first)
+    for item in second:
+        if item not in merged:
+            merged.append(item)
+    return merged
+
+
 def _generate_corrected_answer(
     question: str,
     chunks: list[dict],
@@ -213,6 +347,7 @@ def _build_grounded_prompt(
         "For list questions about projects, skills, experience, tools, education, or achievements, "
         "return a clear bullet list with short evidence from the context.\n"
         "Do not stop after the first matching item if the context contains more.\n\n"
+        f"Intent-specific instructions:\n{_intent_instructions(question)}\n\n"
         f"Workspace: {workspace['title']}\n"
         f"Selection type: {workspace['selection_type']}\n"
         f"Selected paths:\n{_format_paths(workspace['paths'])}\n\n"
@@ -236,6 +371,29 @@ def _format_chunks(chunks: list[dict]) -> str:
         lines.append(block)
         total += len(block)
     return "\n\n---\n\n".join(lines)
+
+
+def _intent_instructions(question: str) -> str:
+    lowered = question.lower()
+    if "skill" in lowered:
+        return (
+            "Return only skills. Group them as Programming, AI/ML, Frameworks/Libraries, "
+            "Cloud/MLOps, and Tools. Exclude project names, company names, dates, links, "
+            "paper names, datasets, and certifications unless they are clearly skills/tools."
+        )
+    if "project" in lowered:
+        return (
+            "Return only actual project names with one-line descriptions. Exclude standalone "
+            "tools, technologies, datasets, companies, paper titles, dates, and links."
+        )
+    if "experience" in lowered:
+        return (
+            "Return only work, internship, and research experience. Include role, organization, "
+            "timeframe when present, and concrete work done."
+        )
+    if "summar" in lowered or "profile" in lowered:
+        return "Summarize the selected document into concise, useful bullets."
+    return "No special formatting beyond answering from the selected context."
 
 
 def _append_source_note(answer: str, chunks: list[dict]) -> str:
