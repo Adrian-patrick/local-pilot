@@ -2,17 +2,17 @@
 # Registers "Ask Local Pilot" in the Windows Explorer right-click context menu
 
 $WorkspaceRoot = Resolve-Path "$PSScriptRoot\.."
-$ExePath = Join-Path $WorkspaceRoot "src-tauri\target\release\Local Pilot.exe"
+$ExePath = Join-Path $WorkspaceRoot "src-tauri\target\release\tauri-app.exe"
 
 # If the release EXE doesn't exist, check the debug EXE as a fallback
 if (-not (Test-Path $ExePath)) {
-    $ExePath = Join-Path $WorkspaceRoot "src-tauri\target\debug\Local Pilot.exe"
+    $ExePath = Join-Path $WorkspaceRoot "src-tauri\target\debug\tauri-app.exe"
 }
 
 if (-not (Test-Path $ExePath)) {
     Write-Host -ForegroundColor Yellow "WARNING: Built executable not found at `n$ExePath"
     Write-Host -ForegroundColor Yellow "Please run 'npm run tauri build' or 'npm run tauri dev' first to compile the app."
-    $ExePath = [IO.Path]::Combine($WorkspaceRoot, "src-tauri\target\release\Local Pilot.exe")
+    $ExePath = [IO.Path]::Combine($WorkspaceRoot, "src-tauri\target\release\tauri-app.exe")
 }
 
 Write-Host "Registering Context Menu..."
