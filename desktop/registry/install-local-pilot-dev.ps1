@@ -24,7 +24,7 @@ function Set-MenuKey {
         [string] $SelectedPathToken
     )
 
-    $commandText = "powershell.exe -NoExit -ExecutionPolicy Bypass -Command `"Set-Location -LiteralPath '$backend'; & '$python' .\local_pilot_cli.py '$SelectedPathToken'`""
+    $commandText = "powershell.exe -WindowStyle Hidden -ExecutionPolicy Bypass -Command `"Set-Location -LiteralPath '$backend'; & '$python' .\local_pilot_popup.py '$SelectedPathToken'`""
 
     $menuKey = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($SubKey)
     $menuKey.SetValue("", "Local Pilot")
@@ -43,4 +43,3 @@ Set-MenuKey "Software\Classes\Directory\Background\shell\LocalPilot" "%V"
 
 Write-Host "Local Pilot context menu installed for this user."
 Write-Host "Right click a file or folder, then click Local Pilot."
-

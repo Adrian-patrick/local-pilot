@@ -85,6 +85,21 @@ Then:
 1. Right click a file or folder.
 2. On Windows 11, choose `Show more options`.
 3. Click `Local Pilot`.
+4. Ask a question in the popup chat window.
+
+The popup uses Ollama locally. Recommended first model:
+
+```bash
+ollama pull qwen3:8b
+```
+
+For slower machines:
+
+```bash
+ollama pull qwen3:4b
+```
+
+If `ollama` is not recognized in PowerShell, open the Ollama app once or restart your terminal after installing Ollama.
 
 To remove it, double-click:
 
