@@ -29,6 +29,8 @@ local-pilot/
     app/
       main.py              FastAPI app
       agent.py             Stage 1 answer runtime
+      rag_engine.py        Local corrective RAG flow
+      rag_store.py         SQLite item memory and chunk store
       context_collector.py File/folder context collection
       extractors.py        Text and PDF extraction
       folder_scanner.py    Folder structure scanner
@@ -106,6 +108,23 @@ ollama pull qwen3:4b
 ```
 
 If `ollama` is not recognized in PowerShell, open the Ollama app once or restart your terminal after installing Ollama.
+
+## Local RAG Memory
+
+Local Pilot stores per-file/folder memory locally:
+
+```text
+backend/data/local_pilot.db
+```
+
+For each selected item it stores:
+
+- extracted chunks
+- content hash
+- chat history
+- source references
+
+Answers are built from retrieved chunks from the selected item, then sent to Ollama.
 
 To remove it, double-click:
 
