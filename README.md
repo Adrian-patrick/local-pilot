@@ -126,6 +126,18 @@ For each selected item it stores:
 
 Answers are built from retrieved chunks from the selected item, then sent to Ollama.
 
+## Workspace Engine
+
+Every selection is treated as a workspace internally:
+
+```text
+one file -> workspace with one item
+many files -> workspace with many items
+folder -> workspace with folder context
+```
+
+The current right-click popup still passes one path, but the backend now supports multi-path workspaces through `answer_workspace(paths, question)`.
+
 To remove it, double-click:
 
 ```text

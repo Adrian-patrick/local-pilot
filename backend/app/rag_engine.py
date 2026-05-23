@@ -7,9 +7,12 @@ from .ollama_client import OllamaError, generate_with_ollama
 from .rag_store import (
     connect,
     content_hash,
+    create_workspace,
     get_item,
     load_chunks,
     load_history,
+    load_workspace_chunks,
+    load_workspace_history,
     path_id,
     replace_chunks,
     save_message,
@@ -24,30 +27,70 @@ MAX_CONTEXT_CHARS = 8_000
 
 
 def answer_with_rag(path: str, question: str) -> dict:
-    context = collect_context(path)
-    item_id = _ensure_indexed(context)
+    return answer_workspace([path], question)
+
+
+def answer_workspace(paths: list[str], question: str) -> dict:
+    contexts = [collect_context(path) for path in paths]
+    workspace = _ensure_workspace(contexts)
 
     with connect() as con:
-        chunks = load_chunks(con, item_id)
-        history = load_history(con, item_id)
+        chunks = load_workspace_chunks(con, workspace["id"])
+        history = load_workspace_history(con, workspace["id"])
         retrieved = retrieve_chunks(question, chunks, top_k=TOP_K)
 
     if not retrieved:
-        answer = "I don't see readable content in the selected document."
+        answer = "I don't see readable content in the selected workspace."
         sources = context["sources"]
     else:
-        answer, validation = _generate_corrected_answer(question, retrieved, history, context)
+        answer, validation = _generate_corrected_answer(question, retrieved, history, workspace)
         sources = sorted({chunk["source"] for chunk in retrieved})
 
     with connect() as con:
-        save_message(con, item_id, "user", question)
-        save_message(con, item_id, "assistant", answer)
+        primary_item_id = workspace["item_ids"][0]
+        save_message(con, primary_item_id, "user", question, workspace_id=workspace["id"])
+        save_message(con, primary_item_id, "assistant", answer, workspace_id=workspace["id"])
 
     return {
         "answer": answer,
-        "selected_path": context["path"],
+        "selected_path": workspace["selection_label"],
         "sources": sources,
     }
+
+
+def _ensure_workspace(contexts: list[dict]) -> dict:
+    item_ids = [_ensure_indexed(context) for context in contexts]
+    workspace_id = _workspace_id(item_ids)
+    selection_type = "single" if len(item_ids) == 1 else "multi"
+    title = _workspace_title(contexts)
+
+    with connect() as con:
+        create_workspace(
+            con,
+            workspace_id=workspace_id,
+            title=title,
+            selection_type=selection_type,
+            item_ids=item_ids,
+        )
+
+    return {
+        "id": workspace_id,
+        "item_ids": item_ids,
+        "title": title,
+        "selection_type": selection_type,
+        "selection_label": title,
+        "paths": [context["path"] for context in contexts],
+    }
+
+
+def _workspace_id(item_ids: list[str]) -> str:
+    return "ws_" + content_hash("|".join(sorted(item_ids)))[:24]
+
+
+def _workspace_title(contexts: list[dict]) -> str:
+    if len(contexts) == 1:
+        return contexts[0]["path"]
+    return f"{len(contexts)} selected items"
 
 
 def _ensure_indexed(context: dict) -> str:
@@ -125,23 +168,23 @@ def _generate_corrected_answer(
     question: str,
     chunks: list[dict],
     history: list[dict],
-    context: dict,
+    workspace: dict,
 ) -> tuple[str, str]:
-    prompt = _build_grounded_prompt(question, chunks, history, context)
+    prompt = _build_grounded_prompt(question, chunks, history, workspace)
     try:
         answer = generate_with_ollama(prompt)
     except OllamaError as exc:
-        return _setup_help(context, question, str(exc)), "ERROR"
+        return _setup_help(workspace, question, str(exc)), "ERROR"
 
     verdict, reason = _validate_answer(answer, chunks)
     if verdict == "PASS":
         return answer, verdict
 
     retry_prompt = (
-        _build_grounded_prompt(question, chunks, history, context)
+        _build_grounded_prompt(question, chunks, history, workspace)
         + "\n\nYour previous answer was rejected because: "
         + reason
-        + "\nRewrite the answer using only the provided document chunks."
+        + "\nRewrite the answer using only the provided workspace chunks."
     )
     try:
         return generate_with_ollama(retry_prompt), "RETRIED"
@@ -153,22 +196,24 @@ def _build_grounded_prompt(
     question: str,
     chunks: list[dict],
     history: list[dict],
-    context: dict,
+    workspace: dict,
 ) -> str:
     context_text = _format_chunks(chunks)
     history_text = _format_history(history)
 
     return (
-        "You are Local Pilot, a document-grounded AI assistant.\n"
-        "Answer ONLY using the selected document context below.\n"
+        "You are Local Pilot, a workspace-grounded AI assistant.\n"
+        "Answer ONLY using the selected workspace context below.\n"
         "Do not use outside knowledge.\n"
         "If the answer is present, answer directly and do not add uncertainty disclaimers.\n"
-        "If the answer is not present in the document, say: "
-        "\"I don't see that in the selected document.\"\n"
+        "If the answer is not present in the selected files, say: "
+        "\"I don't see that in the selected workspace.\"\n"
         "When possible, mention the source file.\n\n"
-        f"Selected item: {context['path']}\n"
-        f"Previous conversation for this item:\n{history_text}\n\n"
-        f"Selected document chunks:\n{context_text}\n\n"
+        f"Workspace: {workspace['title']}\n"
+        f"Selection type: {workspace['selection_type']}\n"
+        f"Selected paths:\n{_format_paths(workspace['paths'])}\n\n"
+        f"Previous conversation for this workspace:\n{history_text}\n\n"
+        f"Selected workspace chunks:\n{context_text}\n\n"
         f"Question: {question}\n\n"
         "Answer:"
     )
@@ -193,6 +238,10 @@ def _format_history(history: list[dict]) -> str:
     if not history:
         return "None"
     return "\n".join(f"{msg['role']}: {msg['content'][:500]}" for msg in history[-6:])
+
+
+def _format_paths(paths: list[str]) -> str:
+    return "\n".join(f"- {path}" for path in paths)
 
 
 def _validate_answer(answer: str, chunks: list[dict]) -> tuple[str, str]:
@@ -252,10 +301,10 @@ def _normalize_text(text: str) -> str:
     return re.sub(r"\n{3,}", "\n\n", text.strip())
 
 
-def _setup_help(context: dict, question: str, error: str) -> str:
+def _setup_help(workspace: dict, question: str, error: str) -> str:
     return (
         "I opened the selected item, but I could not get an answer from Ollama yet.\n\n"
-        f"Selected: {context['path']}\n"
+        f"Selected: {workspace['title']}\n"
         f"Question: {question}\n\n"
         f"Problem: {error}\n\n"
         "Fix:\n"
