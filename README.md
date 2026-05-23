@@ -1,265 +1,167 @@
-# Stage 1 Prototype — Local Pilot MVP
+# Local Pilot — Stage 1 Prototype
 
-## Goal
-
-Prove that OS-native contextual AI interactions are dramatically better than traditional chatbot workflows.
-
-The prototype focuses on:
-
-> Right Click → Ask Agent
-
-for files and folders directly inside the operating system.
+A modern, native, contextual workspace desktop application. 
+The Stage 1 prototype validates OS-native context injection: right-clicking any file inside Windows Explorer, choosing **"Ask Local Pilot"**, and launching the desktop app with the selected file's metadata parsed and displayed instantly in a premium dark glassmorphic UI.
 
 ---
 
-# Core Experience
+## 🚀 Primary Success Flow
 
-Instead of:
-- opening ChatGPT
-- uploading files
-- manually explaining context
-
-Users can:
-
-1. Right click a file or folder
-2. Select `Ask Local Pilot`
-3. Ask a question
-4. Receive contextual answers instantly
+```
+Right-Click File ──> Ask Local Pilot ──> Opens App ──> Selected File Context Displayed
+```
 
 ---
 
-# Supported Inputs
+## 🛠️ Tech Stack
 
-## Files
-- PDF
-- TXT
-- Markdown
-- Python / JS / Code files
-- Images
-
-## Folders
-- Code repositories
-- Project folders
-- Documentation folders
+- **Desktop Framework**: [Tauri v2](https://tauri.app) (Rust Backend)
+- **Frontend**: [React 19](https://react.dev), [TypeScript](https://www.typescriptlang.org)
+- **Styling**: [TailwindCSS v4](https://tailwindcss.com) (Utility-first, dark theme)
+- **Python Environment (For future stages)**: [uv](https://github.com/astral-sh/uv) (FastAPI, Uvicorn, Pydantic)
 
 ---
 
-# Supported Actions
+## 📂 Folder Structure
 
-## File Actions
-- Summarize file
-- Explain file
-- Ask custom questions
-- Extract action items
-- Rewrite content
-- Translate content
-
----
-
-## Folder Actions
-- Explain project structure
-- Summarize repository
-- Identify important files
-- Trace architecture flow
-- Generate documentation
-
----
-
-# Example Workflow
-
-## Example 1 — PDF
-
-Right Click:
-`report.pdf`
-
-Ask:
-> "Summarize the key risks"
-
-Local Pilot:
-- reads PDF
-- extracts text
-- understands context
-- generates concise answer
-
----
-
-## Example 2 — Codebase
-
-Right Click:
-`backend-service/`
-
-Ask:
-> "Explain authentication flow"
-
-Local Pilot:
-- scans repository
-- identifies auth-related files
-- traces logic flow
-- explains architecture
+```text
+local-pilot/
+│
+├── .venv/                      # Python Virtual Environment (uv managed)
+├── src-tauri/                  # Tauri Rust backend, configuration, and dependencies
+│   ├── src/
+│   │   ├── lib.rs              # Rust entrypoint, Tauri commands, and metadata parsing
+│   │   └── main.rs             # Application runner
+│   └── Cargo.toml              # Rust crate manifest
+│
+├── src/                        # React Frontend
+│   ├── assets/                 # SVGs and static media assets
+│   ├── components/             # Reusable UI components
+│   │   ├── Header.tsx          # Workspace window header
+│   │   ├── FileInfoCard.tsx    # Context card displaying parsed file metadata
+│   │   ├── AskSection.tsx      # Disabled visual-only prompt sandbox
+│   │   ├── ErrorState.tsx      # Graceful invalid file/permission error UI
+│   │   ├── EmptyState.tsx      # Direct launch guide when opened without file context
+│   │   └── LoadingState.tsx    # Skeleton screen loading indicator
+│   ├── hooks/
+│   │   └── useFileMetadata.ts  # State management hook for backend communication
+│   ├── types/
+│   │   └── file.ts             # TypeScript definitions matching Rust structs
+│   ├── App.tsx                 # Main layout coordinator
+│   └── index.css               # TailwindCSS v4 imports & custom styles
+│
+├── scripts/                    # Context Menu integration scripts
+│   ├── register-context-menu.ps1    # PowerShell context menu register script
+│   ├── unregister-context-menu.ps1  # PowerShell context menu cleanup script
+│   └── register-context-menu.reg    # Static registry import backup file
+│
+├── package.json                # Frontend package dependencies & NPM scripts
+└── README.md                   # Project documentation
+```
 
 ---
 
-# Stage 1 Features
+## ⚙️ Environment Setup & Running Locally
 
-## 1. OS Context Menu Integration
-Adds:
-> Ask Local Pilot
+### Prerequisites
+1. **Node.js**: v20 or later
+2. **Rust**: Stable toolchain (rustup)
+3. **Python**: `uv` installed (`pip install uv`)
 
-inside:
-- Windows Explorer
-- Finder
-- Linux File Managers
+### 1. Python Environment Setup (Mandatory)
+We use `uv` for python dependencies management. The virtual environment is created and standard packages are pre-loaded:
+```bash
+# Verify venv & install dependencies
+uv sync
+```
 
----
+### 2. Frontend & Tauri Project Setup
+Install node dependencies:
+```bash
+npm install
+```
 
-## 2. Context Collector
+### 3. Run in Development Mode
+Launch the live development server. You can run the app directly, or pass a custom file path argument to test context injection in development!
+```bash
+# Option A: Open directly (shows the helpful empty state guide)
+npm run tauri dev
 
-Automatically gathers:
-- selected file
-- file type
-- metadata
-- folder structure
-- neighboring files
+# Option B: Pass a mock file path to test context injection
+npm run tauri dev -- -- "C:\path\to\your\file.txt"
+```
 
-without manual upload.
-
----
-
-## 3. File Understanding Engine
-
-Processes:
-- PDFs
-- text
-- code
-- images
-
-using:
-- parsers
-- OCR
-- embeddings
-
----
-
-## 4. AI Agent Runtime
-
-Handles:
-- summarization
-- Q&A
-- contextual retrieval
-- code understanding
+### 4. Build for Release (Production)
+Compile the standalone desktop application (`.exe` binary):
+```bash
+npm run tauri build
+```
+The compiled binary will be generated under:
+`src-tauri/target/release/Local Pilot.exe`
 
 ---
 
-## 5. Lightweight Native UI
+## 🎛️ Windows Context Menu Integration
 
-Minimal popup/overlay:
-- fast
-- distraction-free
-- OS-native feeling
+We integrate classically and safely at the user level (`HKCU`), requiring no administrator privileges!
 
----
+### Automatic Registration (Recommended)
+1. Build the release binary: `npm run tauri build`
+2. Open PowerShell in the project directory and run the registration script:
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File .\scripts\register-context-menu.ps1
+   ```
+3. Open Windows Explorer, right-click any file (or folder), and choose **"Ask Local Pilot"**! (Note: On Windows 11, it may appear in the *"Show more options"* classical context menu).
 
-# Tech Stack
+### Manual Registration
+If you prefer manual import, we've created a registry file at `scripts/register-context-menu.reg` pre-populated with your exact workspace directory. Simply double-click the file to import the entries!
 
-## Frontend
-- Tauri / Electron
-
-## Backend
-- Python
-- FastAPI
-
-## AI
-- Ollama
-- Local LLMs
-- OpenAI fallback
-
-## Retrieval
-- ChromaDB / FAISS
-
-## Parsing
-- PyMuPDF
-- Tree-sitter
-- OCR
+### Cleanup / Uninstallation
+To cleanly remove all context menu entries from the Windows registry, run:
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\unregister-context-menu.ps1
+```
 
 ---
 
-# Architecture
+## 🧬 Argument Passing & Backend Mechanics
 
-┌──────────────────────────────┐
-│      Operating System        │
-└──────────────┬───────────────┘
-               │
-               ▼
-┌──────────────────────────────┐
-│     Context Menu Hook        │
-└──────────────┬───────────────┘
-               │
-               ▼
-┌──────────────────────────────┐
-│      Context Collector       │
-└──────────────┬───────────────┘
-               │
-               ▼
-┌──────────────────────────────┐
-│   File Understanding Layer   │
-└──────────────┬───────────────┘
-               │
-               ▼
-┌──────────────────────────────┐
-│       Agent Runtime          │
-└──────────────┬───────────────┘
-               │
-               ▼
-┌──────────────────────────────┐
-│       Response Window        │
-└──────────────────────────────┘
+### 1. Registry Trigger
+When you click **"Ask Local Pilot"** on a file, Windows executes the registered command:
+```cmd
+"C:\path\to\Local Pilot.exe" "%1"
+```
+where `%1` is substituted with the absolute file path of the right-clicked file.
 
----
+### 2. Rust Arg Parsing
+On startup, the Rust backend parses the system arguments, filters out internal Tauri/Vite flags starting with `-` (such as `--port`), and exposes the target path:
+```rust
+// src-tauri/src/lib.rs
+#[tauri::command]
+fn get_selected_file_path() -> Option<String> {
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() > 1 {
+        for arg in args.iter().skip(1) {
+            if !arg.starts_with('-') {
+                return Some(arg.clone());
+            }
+        }
+    }
+    None
+}
+```
 
-# Non-Goals (Stage 1)
+### 3. Metadata Extraction
+Using the native Rust file system library (`std::fs`), we extract exact metadata (handling permission errors, missing files, and cleaning up Windows UNC file prefixes):
+```rust
+#[tauri::command]
+fn get_file_metadata(file_path: String) -> Result<FileMetadata, String> {
+    let path = Path::new(&file_path);
+    // ... validation ...
+    let metadata = fs::metadata(path)?;
+    // ... extract filename, uppercase extension, size, last_modified ...
+}
+```
 
-The MVP will NOT include:
-- autonomous agents
-- voice assistant
-- browser control
-- full OS memory
-- proactive actions
-- cross-device sync
-
-Focus is:
-- contextual AI
-- native workflows
-- file intelligence
-
----
-
-# Success Criteria
-
-The prototype succeeds if users feel:
-
-> "I never want to manually upload files into chatbots again."
-
-Key validation:
-- reduced friction
-- faster workflows
-- contextual usefulness
-- strong UX feel
-
----
-
-# Future Stages
-
-## Stage 2
-- repository-wide memory
-- semantic search
-- cross-file reasoning
-
-## Stage 3
-- workflow automation
-- cross-app orchestration
-- persistent memory
-
-## Stage 4
-- proactive AI operating system
-- voice-native interaction
-- autonomous task execution
+### 4. React Coordination
+On mounting, the React application checks for a file argument via `useFileMetadata` hook, calls the Rust backend commands, and handles transitions (Loading -> Success Info Card OR Error State).
