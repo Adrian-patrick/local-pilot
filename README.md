@@ -87,7 +87,13 @@ Then:
 3. Click `Local Pilot`.
 4. Ask a question in the popup chat window.
 
-The popup uses Ollama locally. Recommended first model:
+The popup uses Ollama locally. Quick test model:
+
+```bash
+ollama pull gemma3:1b
+```
+
+Stronger model:
 
 ```bash
 ollama pull qwen3:8b

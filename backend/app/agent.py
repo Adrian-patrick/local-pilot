@@ -23,7 +23,7 @@ def _ollama_answer(context: dict, question: str) -> str:
 
 def _build_prompt(context: dict, question: str) -> str:
     text = context.get("text") or ""
-    preview = text[:20_000].strip() or "[No readable text found]"
+    preview = text[:6_000].strip() or "[No readable text found]"
     sources = "\n".join(f"- {source}" for source in context.get("sources", [])[:15])
 
     return (

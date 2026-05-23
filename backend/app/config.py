@@ -27,7 +27,7 @@ def get_settings() -> Settings:
         model_provider=os.getenv("LOCAL_PILOT_MODEL_PROVIDER", "mock"),
         openai_api_key=os.getenv("OPENAI_API_KEY"),
         ollama_base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
-        ollama_model=os.getenv("OLLAMA_MODEL", "qwen3:8b"),
+        ollama_model=os.getenv("OLLAMA_MODEL", "gemma3:1b"),
         max_file_chars=int(os.getenv("LOCAL_PILOT_MAX_FILE_CHARS", "120000")),
         max_folder_files=int(os.getenv("LOCAL_PILOT_MAX_FOLDER_FILES", "200")),
     )

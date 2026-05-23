@@ -18,7 +18,8 @@ def generate_with_ollama(prompt: str) -> str:
         "stream": False,
         "options": {
             "temperature": 0.2,
-            "num_ctx": 8192,
+            "num_ctx": 4096,
+            "num_predict": 512,
         },
     }
 
@@ -47,4 +48,3 @@ def generate_with_ollama(prompt: str) -> str:
     if not answer:
         raise OllamaError("Ollama returned an empty response.")
     return answer
-
