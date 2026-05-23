@@ -12,6 +12,26 @@ IGNORED_DIRS = {
     "dist",
     "build",
     ".next",
+    "data",
+}
+
+IGNORED_EXTENSIONS = {
+    ".7z",
+    ".bin",
+    ".db",
+    ".dll",
+    ".exe",
+    ".gif",
+    ".ico",
+    ".jpg",
+    ".jpeg",
+    ".mp3",
+    ".mp4",
+    ".png",
+    ".pyc",
+    ".sqlite",
+    ".webp",
+    ".zip",
 }
 
 
@@ -25,7 +45,7 @@ def scan_folder(root: Path, max_files: int = 200) -> list[dict]:
         if any(part in IGNORED_DIRS for part in path.relative_to(root).parts):
             continue
 
-        if path.is_file():
+        if path.is_file() and path.suffix.lower() not in IGNORED_EXTENSIONS:
             stat = path.stat()
             results.append(
                 {
@@ -37,4 +57,3 @@ def scan_folder(root: Path, max_files: int = 200) -> list[dict]:
             )
 
     return results
-

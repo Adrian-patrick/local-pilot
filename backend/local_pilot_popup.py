@@ -150,20 +150,20 @@ class LocalPilotPopup:
 
         quick_actions = [
             (
-                "Summary",
-                "Give a concise profile summary in 5 bullets. Focus on who the person is, core strengths, experience, projects, and education/research if present.",
+                "Overview",
+                "Give a concise overview of the selected file in 5 bullets. Use only information from the file.",
             ),
             (
-                "Skills",
-                "Extract only technical and professional skills from this document. Group them under: Programming, AI/ML, Frameworks/Libraries, Cloud/MLOps, Tools. Do not include project names, company names, dates, papers, links, or certifications as skills.",
+                "Key Points",
+                "Extract the key points from the selected file. Group related points when helpful. Do not add outside information.",
             ),
             (
-                "Projects",
-                "List only actual project names from this document with one-line descriptions. Do not list tools, skills, companies, datasets, papers, dates, or links as projects.",
+                "Find Items",
+                "List the important named items in this file, such as projects, sections, entities, tasks, or records. Include short descriptions only when the file provides them.",
             ),
             (
-                "Experience",
-                "Summarize only work, internship, and research experience from this document. Include role, organization, timeframe if present, and what was done.",
+                "Actions",
+                "Extract action items, decisions, requirements, risks, or next steps from this file. If none are present, say so.",
             ),
         ]
         for index, (label, prompt) in enumerate(quick_actions):

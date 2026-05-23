@@ -173,64 +173,65 @@ def retrieve_chunks(question: str, chunks: list[dict], top_k: int = TOP_K) -> li
 def _deterministic_answer(question: str, chunks: list[dict], extracted_text: str = "") -> str | None:
     lowered = question.lower()
     text = extracted_text or "\n".join(chunk["text"] for chunk in chunks)
-    is_project_request = "project" in lowered and not lowered.startswith("extract only technical")
-    if is_project_request:
-        return _deterministic_projects(text)
-    if "skill" in lowered:
-        return _deterministic_skills(text)
-    if "experience" in lowered:
-        return _deterministic_experience(text)
-
-
-def _deterministic_projects(text: str) -> str | None:
-    project_section = _section_between(
-        text,
-        start_markers=("Projects",),
-        end_markers=("Education", "Certifications", "Leadership", "Achievements"),
-    )
-
-    projects = _extract_project_lines(project_section or text)
-    if len(projects) < 2 and project_section:
-        projects = _merge_unique(projects, _extract_project_lines(text))
-    if not projects:
+    sections = _requested_sections(lowered)
+    if not sections:
         return None
 
-    return "Projects mentioned:\n" + "\n".join(f"- {project}" for project in projects)
-
-
-def _deterministic_skills(text: str) -> str | None:
-    section = _section_between(
-        text,
-        start_markers=("Technical Skills", "Skills"),
-        end_markers=("Research", "Experience", "Projects", "Education"),
-    )
-    if not section:
-        return None
-    lines = _clean_section_lines(section, skip_headers=("Technical Skills", "Skills"))
-    if not lines:
-        return None
-    return "Skills mentioned:\n" + "\n".join(f"- {line}" for line in lines[:10])
-
-
-def _deterministic_experience(text: str) -> str | None:
-    research = _section_between(
-        text,
-        start_markers=("Research",),
-        end_markers=("Experience", "Projects", "Education"),
-    )
-    experience = _section_between(
-        text,
-        start_markers=("Experience",),
-        end_markers=("Projects", "Education", "Publication", "Certifications"),
-    )
     blocks = []
-    if research:
-        blocks.append("Research:\n" + "\n".join(_clean_section_lines(research, skip_headers=("Research",))[:6]))
-    if experience:
-        blocks.append("Experience:\n" + "\n".join(_clean_section_lines(experience, skip_headers=("Experience",))[:10]))
+    for section_name in sections:
+        section = _section_between(text, (section_name,), COMMON_SECTION_HEADINGS)
+        lines = _clean_section_lines(section, skip_headers=(section_name,))
+        if lines:
+            blocks.append(f"{section_name}:\n" + "\n".join(f"- {line}" for line in lines[:10]))
+
     if not blocks:
         return None
     return "\n\n".join(blocks)
+
+
+COMMON_SECTION_HEADINGS = (
+    "Summary",
+    "Profile",
+    "Objective",
+    "Technical Skills",
+    "Skills",
+    "Research",
+    "Experience",
+    "Projects",
+    "Education",
+    "Publications",
+    "Publication & Certifications",
+    "Certifications",
+    "Achievements",
+    "Action Items",
+    "Requirements",
+    "Risks",
+    "Decisions",
+    "Next Steps",
+)
+
+
+def _requested_sections(question: str) -> list[str]:
+    mapping = [
+        (r"\btechnical skills\b", "Technical Skills"),
+        (r"\bskills?\b", "Skills"),
+        (r"\bresearch\b", "Research"),
+        (r"\bexperience\b", "Experience"),
+        (r"\bprojects\b|\blist\b.*\bproject\b|\bproject list\b", "Projects"),
+        (r"\beducation\b", "Education"),
+        (r"\bcertifications?\b", "Certifications"),
+        (r"\bpublications?\b", "Publications"),
+        (r"\baction items?\b", "Action Items"),
+        (r"\brequirements?\b", "Requirements"),
+        (r"\brisks?\b", "Risks"),
+        (r"\bdecisions?\b", "Decisions"),
+        (r"\bnext steps?\b", "Next Steps"),
+    ]
+    sections = []
+    for pattern, section in mapping:
+        if re.search(pattern, question) and section not in sections:
+            sections.append(section)
+    return sections
 
 
 def _section_between(text: str, start_markers: tuple[str, ...], end_markers: tuple[str, ...]) -> str:
@@ -344,8 +345,10 @@ def _build_grounded_prompt(
         "If the answer is not present in the selected files, say: "
         "\"I don't see that in the selected workspace.\"\n"
         "When possible, mention the source file.\n"
-        "For list questions about projects, skills, experience, tools, education, or achievements, "
-        "return a clear bullet list with short evidence from the context.\n"
+        "Handle any readable file type: documents, notes, data files, slides, code, or folders.\n"
+        "For list questions, return a clear bullet list with short evidence from the context.\n"
+        "For code or folder questions, explain files, functions, dependencies, and flow only when "
+        "the selected context shows them.\n"
         "Do not stop after the first matching item if the context contains more.\n\n"
         f"Intent-specific instructions:\n{_intent_instructions(question)}\n\n"
         f"Workspace: {workspace['title']}\n"
@@ -375,13 +378,21 @@ def _format_chunks(chunks: list[dict]) -> str:
 
 def _intent_instructions(question: str) -> str:
     lowered = question.lower()
+    if "key point" in lowered or "important" in lowered:
+        return "Extract the most important points from the selected context. Group related points when helpful."
+    if "action" in lowered or "next step" in lowered or "risk" in lowered or "requirement" in lowered:
+        return "Extract action items, decisions, requirements, risks, or next steps. If none are present, say so."
+    if "named item" in lowered or "entities" in lowered or "records" in lowered:
+        return "List important named items from the selected context with short descriptions grounded in the text."
+    if "structure" in lowered or "architecture" in lowered or "flow" in lowered:
+        return "Explain the structure and how the selected files connect, using file paths and code references when present."
     if "skill" in lowered:
         return (
             "Return only skills. Group them as Programming, AI/ML, Frameworks/Libraries, "
             "Cloud/MLOps, and Tools. Exclude project names, company names, dates, links, "
             "paper names, datasets, and certifications unless they are clearly skills/tools."
         )
-    if "project" in lowered:
+    if re.search(r"\bprojects\b|\blist\b.*\bproject\b|\bproject list\b", lowered):
         return (
             "Return only actual project names with one-line descriptions. Exclude standalone "
             "tools, technologies, datasets, companies, paper titles, dates, and links."

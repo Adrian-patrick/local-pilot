@@ -15,6 +15,7 @@ The first build focuses on Windows Explorer integration.
 Supported early inputs:
 
 - PDF files
+- DOCX and PPTX files
 - TXT and Markdown files
 - Python, JavaScript, TypeScript, HTML, CSS, JSON, YAML, and similar text/code files
 - Folders and code repositories
@@ -31,9 +32,9 @@ local-pilot/
       agent.py             Stage 1 answer runtime
       rag_engine.py        Local corrective RAG flow
       rag_store.py         SQLite item memory and chunk store
-      context_collector.py File/folder context collection
-      extractors.py        Text and PDF extraction
-      folder_scanner.py    Folder structure scanner
+      context_collector.py File/folder context and readable content collection
+      extractors.py        Text, PDF, DOCX, and PPTX extraction
+      folder_scanner.py    Folder scanner with binary/build output filtering
       schemas.py           API request/response models
     local_pilot_cli.py     CLI entry point for context-menu testing
   desktop/
@@ -125,6 +126,7 @@ For each selected item it stores:
 - source references
 
 Answers are built from retrieved chunks from the selected item, then sent to Ollama.
+For folders, Local Pilot stores the folder structure plus readable contents from supported files.
 
 ## Workspace Engine
 
