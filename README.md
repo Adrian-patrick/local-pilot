@@ -1,265 +1,102 @@
-# Stage 1 Prototype — Local Pilot MVP
+# Local Pilot
 
-## Goal
+Local Pilot is an OS-native contextual AI layer for files, folders, and codebases.
 
-Prove that OS-native contextual AI interactions are dramatically better than traditional chatbot workflows.
+The Stage 1 prototype proves one core workflow:
 
-The prototype focuses on:
+```text
+Right click a file or folder -> Ask Local Pilot -> get a contextual answer
+```
 
-> Right Click → Ask Agent
+## Stage 1 Scope
 
-for files and folders directly inside the operating system.
+The first build focuses on Windows Explorer integration.
 
----
+Supported early inputs:
 
-# Core Experience
+- PDF files
+- TXT and Markdown files
+- Python, JavaScript, TypeScript, HTML, CSS, JSON, YAML, and similar text/code files
+- Folders and code repositories
 
-Instead of:
-- opening ChatGPT
-- uploading files
-- manually explaining context
+Stage 1 does not include autonomous agents, voice control, browser control, full OS memory, or cross-device sync.
 
-Users can:
+## Current Project Structure
 
-1. Right click a file or folder
-2. Select `Ask Local Pilot`
-3. Ask a question
-4. Receive contextual answers instantly
+```text
+local-pilot/
+  backend/
+    app/
+      main.py              FastAPI app
+      agent.py             Stage 1 answer runtime
+      context_collector.py File/folder context collection
+      extractors.py        Text and PDF extraction
+      folder_scanner.py    Folder structure scanner
+      schemas.py           API request/response models
+    local_pilot_cli.py     CLI entry point for context-menu testing
+  desktop/
+    registry/
+      add-local-pilot-dev.reg
+      remove-local-pilot.reg
+  docs/
+    github-ownership.md
+    stage-1-build-plan.md
+```
 
----
+## Run The CLI Prototype
 
-# Supported Inputs
+From the repo root:
 
-## Files
-- PDF
-- TXT
-- Markdown
-- Python / JS / Code files
-- Images
+```bash
+pip install -r requirements.txt
+python backend/local_pilot_cli.py "C:\Path\To\FileOrFolder"
+```
 
-## Folders
-- Code repositories
-- Project folders
-- Documentation folders
+## Run The API
 
----
+```bash
+uvicorn backend.app.main:app --reload
+```
 
-# Supported Actions
+Then open:
 
-## File Actions
-- Summarize file
-- Explain file
-- Ask custom questions
-- Extract action items
-- Rewrite content
-- Translate content
+```text
+http://127.0.0.1:8000/health
+```
 
----
+Example API request:
 
-## Folder Actions
-- Explain project structure
-- Summarize repository
-- Identify important files
-- Trace architecture flow
-- Generate documentation
+```bash
+curl -X POST http://127.0.0.1:8000/ask ^
+  -H "Content-Type: application/json" ^
+  -d "{\"path\":\"C:\\Path\\To\\FileOrFolder\",\"question\":\"Summarize this\"}"
+```
 
----
+## Add Windows Context Menu Entry
 
-# Example Workflow
+For development, double-click:
 
-## Example 1 — PDF
+```text
+desktop/registry/add-local-pilot-dev.reg
+```
 
-Right Click:
-`report.pdf`
+Then:
 
-Ask:
-> "Summarize the key risks"
+1. Right click a file or folder.
+2. On Windows 11, choose `Show more options`.
+3. Click `Ask Local Pilot`.
 
-Local Pilot:
-- reads PDF
-- extracts text
-- understands context
-- generates concise answer
+To remove it, double-click:
 
----
+```text
+desktop/registry/remove-local-pilot.reg
+```
 
-## Example 2 — Codebase
+## GitHub Authorship
 
-Right Click:
-`backend-service/`
+This repo can be owned by Adrian while your commits still show as yours. See:
 
-Ask:
-> "Explain authentication flow"
+```text
+docs/github-ownership.md
+```
 
-Local Pilot:
-- scans repository
-- identifies auth-related files
-- traces logic flow
-- explains architecture
-
----
-
-# Stage 1 Features
-
-## 1. OS Context Menu Integration
-Adds:
-> Ask Local Pilot
-
-inside:
-- Windows Explorer
-- Finder
-- Linux File Managers
-
----
-
-## 2. Context Collector
-
-Automatically gathers:
-- selected file
-- file type
-- metadata
-- folder structure
-- neighboring files
-
-without manual upload.
-
----
-
-## 3. File Understanding Engine
-
-Processes:
-- PDFs
-- text
-- code
-- images
-
-using:
-- parsers
-- OCR
-- embeddings
-
----
-
-## 4. AI Agent Runtime
-
-Handles:
-- summarization
-- Q&A
-- contextual retrieval
-- code understanding
-
----
-
-## 5. Lightweight Native UI
-
-Minimal popup/overlay:
-- fast
-- distraction-free
-- OS-native feeling
-
----
-
-# Tech Stack
-
-## Frontend
-- Tauri / Electron
-
-## Backend
-- Python
-- FastAPI
-
-## AI
-- Ollama
-- Local LLMs
-- OpenAI fallback
-
-## Retrieval
-- ChromaDB / FAISS
-
-## Parsing
-- PyMuPDF
-- Tree-sitter
-- OCR
-
----
-
-# Architecture
-
-┌──────────────────────────────┐
-│      Operating System        │
-└──────────────┬───────────────┘
-               │
-               ▼
-┌──────────────────────────────┐
-│     Context Menu Hook        │
-└──────────────┬───────────────┘
-               │
-               ▼
-┌──────────────────────────────┐
-│      Context Collector       │
-└──────────────┬───────────────┘
-               │
-               ▼
-┌──────────────────────────────┐
-│   File Understanding Layer   │
-└──────────────┬───────────────┘
-               │
-               ▼
-┌──────────────────────────────┐
-│       Agent Runtime          │
-└──────────────┬───────────────┘
-               │
-               ▼
-┌──────────────────────────────┐
-│       Response Window        │
-└──────────────────────────────┘
-
----
-
-# Non-Goals (Stage 1)
-
-The MVP will NOT include:
-- autonomous agents
-- voice assistant
-- browser control
-- full OS memory
-- proactive actions
-- cross-device sync
-
-Focus is:
-- contextual AI
-- native workflows
-- file intelligence
-
----
-
-# Success Criteria
-
-The prototype succeeds if users feel:
-
-> "I never want to manually upload files into chatbots again."
-
-Key validation:
-- reduced friction
-- faster workflows
-- contextual usefulness
-- strong UX feel
-
----
-
-# Future Stages
-
-## Stage 2
-- repository-wide memory
-- semantic search
-- cross-file reasoning
-
-## Stage 3
-- workflow automation
-- cross-app orchestration
-- persistent memory
-
-## Stage 4
-- proactive AI operating system
-- voice-native interaction
-- autonomous task execution
