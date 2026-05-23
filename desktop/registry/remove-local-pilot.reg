@@ -3,4 +3,6 @@ Windows Registry Editor Version 5.00
 [-HKEY_CURRENT_USER\Software\Classes\*\shell\AskLocalPilot]
 [-HKEY_CURRENT_USER\Software\Classes\Directory\shell\AskLocalPilot]
 [-HKEY_CURRENT_USER\Software\Classes\Directory\Background\shell\AskLocalPilot]
-
+[-HKEY_CURRENT_USER\Software\Classes\*\shell\LocalPilot]
+[-HKEY_CURRENT_USER\Software\Classes\Directory\shell\LocalPilot]
+[-HKEY_CURRENT_USER\Software\Classes\Directory\Background\shell\LocalPilot]

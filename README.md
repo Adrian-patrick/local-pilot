@@ -84,7 +84,7 @@ Then:
 
 1. Right click a file or folder.
 2. On Windows 11, choose `Show more options`.
-3. Click `Ask Local Pilot`.
+3. Click `Local Pilot`.
 
 To remove it, double-click:
 
@@ -99,4 +99,3 @@ This repo can be owned by Adrian while your commits still show as yours. See:
 ```text
 docs/github-ownership.md
 ```
-

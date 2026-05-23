@@ -1,19 +1,19 @@
 Windows Registry Editor Version 5.00
 
-[HKEY_CURRENT_USER\Software\Classes\*\shell\AskLocalPilot]
-@="Ask Local Pilot"
+[HKEY_CURRENT_USER\Software\Classes\*\shell\LocalPilot]
+@="Local Pilot"
 
-[HKEY_CURRENT_USER\Software\Classes\*\shell\AskLocalPilot\command]
+[HKEY_CURRENT_USER\Software\Classes\*\shell\LocalPilot\command]
 @="powershell.exe -NoExit -ExecutionPolicy Bypass -Command \"Set-Location -LiteralPath 'C:\\Users\\Hitan\\Documents\\Codex\\2026-05-23\\file-edit-view-window-help-identify\\local-pilot\\backend'; & 'C:\\Users\\Hitan\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe' .\\local_pilot_cli.py '%1'\""
 
-[HKEY_CURRENT_USER\Software\Classes\Directory\shell\AskLocalPilot]
-@="Ask Local Pilot"
+[HKEY_CURRENT_USER\Software\Classes\Directory\shell\LocalPilot]
+@="Local Pilot"
 
-[HKEY_CURRENT_USER\Software\Classes\Directory\shell\AskLocalPilot\command]
+[HKEY_CURRENT_USER\Software\Classes\Directory\shell\LocalPilot\command]
 @="powershell.exe -NoExit -ExecutionPolicy Bypass -Command \"Set-Location -LiteralPath 'C:\\Users\\Hitan\\Documents\\Codex\\2026-05-23\\file-edit-view-window-help-identify\\local-pilot\\backend'; & 'C:\\Users\\Hitan\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe' .\\local_pilot_cli.py '%1'\""
 
-[HKEY_CURRENT_USER\Software\Classes\Directory\Background\shell\AskLocalPilot]
-@="Ask Local Pilot"
+[HKEY_CURRENT_USER\Software\Classes\Directory\Background\shell\LocalPilot]
+@="Local Pilot"
 
-[HKEY_CURRENT_USER\Software\Classes\Directory\Background\shell\AskLocalPilot\command]
+[HKEY_CURRENT_USER\Software\Classes\Directory\Background\shell\LocalPilot\command]
 @="powershell.exe -NoExit -ExecutionPolicy Bypass -Command \"Set-Location -LiteralPath 'C:\\Users\\Hitan\\Documents\\Codex\\2026-05-23\\file-edit-view-window-help-identify\\local-pilot\\backend'; & 'C:\\Users\\Hitan\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe' .\\local_pilot_cli.py '%V'\""
