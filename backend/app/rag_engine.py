@@ -35,13 +35,19 @@ def answer_workspace(paths: list[str], question: str) -> dict:
     with connect() as con:
         chunks = load_workspace_chunks(con, workspace["id"])
         history = load_workspace_history(con, workspace["id"])
+
+    memory_question = _is_memory_question(question)
+    if memory_question:
+        answer = _memory_answer(history)
+        sources = []
+    else:
         retrieved = retrieve_chunks(question, chunks, top_k=TOP_K)
         retrieved = _expand_context_for_question(question, chunks, retrieved)
 
-    if not retrieved:
+    if not memory_question and not retrieved:
         answer = "I don't see readable content in the selected workspace."
         sources = workspace["paths"]
-    else:
+    elif not memory_question:
         extracted_answer = _profile_answer(question, chunks, extracted_text)
         if not extracted_answer:
             extracted_answer = _deterministic_answer(question, chunks, extracted_text)
@@ -263,6 +269,30 @@ def _requested_sections(question: str) -> list[str]:
         if re.search(pattern, question) and section not in sections:
             sections.append(section)
     return sections
+
+
+def _is_memory_question(question: str) -> bool:
+    lowered = question.lower()
+    return bool(
+        re.search(r"\bpast\s+(conversation|chat|question|history)\b", lowered)
+        or re.search(r"\bprevious\s+(conversation|chat|question|history)\b", lowered)
+        or re.search(r"\bconversation\s+history\b", lowered)
+        or re.search(r"\bchat\s+history\b", lowered)
+        or re.search(r"\bdid i ask\b", lowered)
+        or re.search(r"\bhave i asked\b", lowered)
+        or re.search(r"\bwhat did i ask\b", lowered)
+    )
+
+
+def _memory_answer(history: list[dict]) -> str:
+    user_questions = [msg["content"].strip() for msg in history if msg["role"] == "user" and msg["content"].strip()]
+
+    if not user_questions:
+        return "No, I don't see any past conversation for this selected file or workspace yet."
+
+    recent = user_questions[-5:]
+    lines = "\n".join(f"- {question}" for question in recent)
+    return "Yes. For this selected file or workspace, I found these previous questions:\n" + lines
 
 
 def _expand_context_for_question(question: str, chunks: list[dict], retrieved: list[dict]) -> list[dict]:
