@@ -111,9 +111,18 @@ ollama pull qwen3:4b
 
 If `ollama` is not recognized in PowerShell, open the Ollama app once or restart your terminal after installing Ollama.
 
+The popup also has a `Settings` button where you can choose the model provider, change model names, and add API keys.
+
 ## AI Providers
 
 Local Pilot uses Ollama by default so selected file content stays on your computer.
+
+In the popup, click `Settings` to configure:
+
+- provider: Ollama, auto, OpenAI, Claude, Gemini, or Groq
+- model names
+- API keys
+- cloud fallback behavior
 
 Configure the provider with environment variables:
 
@@ -150,6 +159,13 @@ LOCAL_PILOT_ALLOW_CLOUD_FALLBACK=true
 ```
 
 Privacy rule: cloud providers receive the selected chunks needed to answer the question.
+
+The backend also exposes provider settings for a future React/Electron settings screen:
+
+```text
+GET  /settings
+POST /settings
+```
 
 ## Local RAG Memory
 

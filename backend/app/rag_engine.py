@@ -493,7 +493,8 @@ def _setup_help(workspace: dict, question: str, error: str) -> str:
         f"Question: {question}\n\n"
         f"Problem: {error}\n\n"
         "Fix:\n"
-        "1. Open Ollama.\n"
-        "2. Make sure the selected model is installed.\n"
-        "3. Try Local Pilot again."
+        "1. Open Local Pilot Settings.\n"
+        "2. Choose Ollama or add a cloud API key.\n"
+        "3. Make sure the selected model is available.\n"
+        "4. Try Local Pilot again."
     )

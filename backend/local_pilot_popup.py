@@ -9,7 +9,9 @@ from tkinter import ttk
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from app.agent import answer_question
+from app.config import get_settings
 from app.context_collector import collect_context
+from app.settings_store import read_env_values, save_env_values
 
 
 class LocalPilotPopup:
@@ -17,6 +19,7 @@ class LocalPilotPopup:
         self.selected_path = selected_path
         self.messages: queue.Queue[tuple[str, str]] = queue.Queue()
         self.context_summary = "Loading selected item..."
+        self.settings = get_settings()
 
         self.root = tk.Tk()
         self.root.title("Local Pilot")
@@ -62,6 +65,15 @@ class LocalPilotPopup:
             background=[("active", self.colors["brand_dark"]), ("disabled", "#94a3b8")],
             foreground=[("disabled", "#eef2ff")],
         )
+        style.configure(
+            "Ghost.TButton",
+            background=self.colors["bg"],
+            foreground=self.colors["brand"],
+            borderwidth=1,
+            focusthickness=0,
+            font=("Segoe UI", 9, "bold"),
+            padding=(10, 8),
+        )
 
     def _build_ui(self) -> None:
         self.root.columnconfigure(0, weight=1)
@@ -75,6 +87,7 @@ class LocalPilotPopup:
         header = tk.Frame(shell, bg=self.colors["bg"])
         header.grid(row=0, column=0, sticky="ew", pady=(0, 14))
         header.columnconfigure(1, weight=1)
+        header.columnconfigure(2, weight=0)
 
         mark = tk.Canvas(header, width=42, height=42, bg=self.colors["bg"], highlightthickness=0)
         mark.grid(row=0, column=0, rowspan=2, sticky="nw", padx=(0, 12))
@@ -98,6 +111,27 @@ class LocalPilotPopup:
             bg=self.colors["bg"],
             anchor="w",
         ).grid(row=1, column=1, sticky="ew", pady=(2, 0))
+
+        provider_area = tk.Frame(header, bg=self.colors["bg"])
+        provider_area.grid(row=0, column=2, rowspan=2, sticky="ne")
+
+        self.provider_badge = tk.Label(
+            provider_area,
+            text=self._provider_badge_text(),
+            font=("Segoe UI", 9, "bold"),
+            fg=self.colors["brand"],
+            bg="#eef4ff",
+            padx=10,
+            pady=6,
+        )
+        self.provider_badge.grid(row=0, column=0, sticky="e", padx=(0, 8))
+
+        ttk.Button(
+            provider_area,
+            text="Settings",
+            style="Ghost.TButton",
+            command=self._open_settings,
+        ).grid(row=0, column=1, sticky="e")
 
         context_card = tk.Frame(
             shell,
@@ -254,14 +288,15 @@ class LocalPilotPopup:
         )
         self.status.grid(row=0, column=0, sticky="ew")
 
-        tk.Label(
+        self.privacy_label = tk.Label(
             footer,
-            text="Powered by local Ollama",
+            text=self._privacy_text(),
             font=("Segoe UI", 9),
             fg=self.colors["muted"],
             bg=self.colors["bg"],
             anchor="e",
-        ).grid(row=0, column=1, sticky="e")
+        )
+        self.privacy_label.grid(row=0, column=1, sticky="e")
 
     def _load_context_preview(self) -> None:
         try:
@@ -275,6 +310,165 @@ class LocalPilotPopup:
         except Exception as exc:
             self.summary_label.configure(text="Could not load selected item.")
             self._append("Local Pilot", f"Could not load selected item:\n{exc}")
+
+    def _provider_badge_text(self) -> str:
+        provider = self.settings.model_provider
+        model = {
+            "ollama": self.settings.ollama_model,
+            "openai": self.settings.openai_model,
+            "anthropic": self.settings.anthropic_model,
+            "gemini": self.settings.gemini_model,
+            "groq": self.settings.groq_model,
+            "auto": f"auto -> {self.settings.ollama_model}",
+        }.get(provider, provider)
+        return f"{provider.title()} | {model}"
+
+    def _privacy_text(self) -> str:
+        if self.settings.model_provider == "ollama":
+            return "Local mode: selected context stays on this computer"
+        if self.settings.model_provider == "auto" and not self.settings.allow_cloud_fallback:
+            return "Auto mode: local first, cloud fallback off"
+        return "Cloud mode: selected chunks may be sent to the provider"
+
+    def _refresh_settings_view(self) -> None:
+        self.settings = get_settings()
+        self.provider_badge.configure(text=self._provider_badge_text())
+        self.privacy_label.configure(text=self._privacy_text())
+
+    def _open_settings(self) -> None:
+        values = read_env_values()
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Local Pilot Settings")
+        dialog.geometry("620x640")
+        dialog.minsize(560, 540)
+        dialog.configure(bg=self.colors["bg"])
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        dialog.columnconfigure(0, weight=1)
+        body = tk.Frame(dialog, bg=self.colors["bg"], padx=22, pady=20)
+        body.grid(row=0, column=0, sticky="nsew")
+        body.columnconfigure(0, weight=1)
+
+        tk.Label(
+            body,
+            text="AI Provider Settings",
+            font=("Segoe UI", 16, "bold"),
+            fg=self.colors["text"],
+            bg=self.colors["bg"],
+            anchor="w",
+        ).grid(row=0, column=0, sticky="ew")
+
+        tk.Label(
+            body,
+            text="Local mode is private. Cloud mode can send selected file chunks to the API provider.",
+            font=("Segoe UI", 9),
+            fg=self.colors["muted"],
+            bg=self.colors["bg"],
+            anchor="w",
+            wraplength=560,
+            justify="left",
+        ).grid(row=1, column=0, sticky="ew", pady=(4, 14))
+
+        form = tk.Frame(body, bg=self.colors["panel"], highlightbackground=self.colors["border"], highlightthickness=1, padx=16, pady=14)
+        form.grid(row=2, column=0, sticky="ew")
+        form.columnconfigure(1, weight=1)
+
+        entries: dict[str, tk.Entry] = {}
+        provider_var = tk.StringVar(value=values.get("LOCAL_PILOT_MODEL_PROVIDER", self.settings.model_provider))
+        fallback_var = tk.BooleanVar(
+            value=values.get(
+                "LOCAL_PILOT_ALLOW_CLOUD_FALLBACK",
+                str(self.settings.allow_cloud_fallback).lower(),
+            ).lower()
+            in {"1", "true", "yes", "on"}
+        )
+
+        self._settings_label(form, "Provider", 0)
+        provider_box = ttk.Combobox(
+            form,
+            textvariable=provider_var,
+            values=("ollama", "auto", "openai", "anthropic", "gemini", "groq"),
+            state="readonly",
+            font=("Segoe UI", 10),
+        )
+        provider_box.grid(row=0, column=1, sticky="ew", pady=(0, 10))
+
+        rows = [
+            ("Ollama URL", "OLLAMA_BASE_URL", self.settings.ollama_base_url, False),
+            ("Ollama model", "OLLAMA_MODEL", self.settings.ollama_model, False),
+            ("OpenAI key", "OPENAI_API_KEY", self.settings.openai_api_key or "", True),
+            ("OpenAI model", "OPENAI_MODEL", self.settings.openai_model, False),
+            ("Claude key", "ANTHROPIC_API_KEY", self.settings.anthropic_api_key or "", True),
+            ("Claude model", "ANTHROPIC_MODEL", self.settings.anthropic_model, False),
+            ("Gemini key", "GEMINI_API_KEY", self.settings.gemini_api_key or "", True),
+            ("Gemini model", "GEMINI_MODEL", self.settings.gemini_model, False),
+            ("Groq key", "GROQ_API_KEY", self.settings.groq_api_key or "", True),
+            ("Groq model", "GROQ_MODEL", self.settings.groq_model, False),
+        ]
+
+        for row_index, (label, key, default, secret) in enumerate(rows, start=1):
+            self._settings_label(form, label, row_index)
+            entry = tk.Entry(
+                form,
+                font=("Segoe UI", 10),
+                fg=self.colors["text"],
+                bg="#ffffff",
+                relief=tk.SOLID,
+                bd=1,
+                show="*" if secret else "",
+            )
+            entry.insert(0, values.get(key, default or ""))
+            entry.grid(row=row_index, column=1, sticky="ew", pady=(0, 10), ipady=5)
+            entries[key] = entry
+
+        fallback = tk.Checkbutton(
+            form,
+            text="Allow cloud fallback when auto mode cannot use Ollama",
+            variable=fallback_var,
+            fg=self.colors["text"],
+            bg=self.colors["panel"],
+            activebackground=self.colors["panel"],
+            font=("Segoe UI", 9),
+            anchor="w",
+        )
+        fallback.grid(row=len(rows) + 1, column=1, sticky="w", pady=(0, 4))
+
+        status = tk.Label(
+            body,
+            text="",
+            font=("Segoe UI", 9),
+            fg=self.colors["muted"],
+            bg=self.colors["bg"],
+            anchor="w",
+        )
+        status.grid(row=3, column=0, sticky="ew", pady=(10, 0))
+
+        buttons = tk.Frame(body, bg=self.colors["bg"])
+        buttons.grid(row=4, column=0, sticky="e", pady=(14, 0))
+
+        def save() -> None:
+            updates = {
+                "LOCAL_PILOT_MODEL_PROVIDER": provider_var.get(),
+                "LOCAL_PILOT_ALLOW_CLOUD_FALLBACK": str(fallback_var.get()).lower(),
+            }
+            updates.update({key: entry.get() for key, entry in entries.items()})
+            save_env_values(updates)
+            self._refresh_settings_view()
+            status.configure(text="Saved. New questions will use these settings.")
+
+        ttk.Button(buttons, text="Save", style="Accent.TButton", command=save).grid(row=0, column=0, padx=(0, 8))
+        ttk.Button(buttons, text="Close", command=dialog.destroy).grid(row=0, column=1)
+
+    def _settings_label(self, parent: tk.Frame, text: str, row: int) -> None:
+        tk.Label(
+            parent,
+            text=text,
+            font=("Segoe UI", 9, "bold"),
+            fg=self.colors["muted"],
+            bg=self.colors["panel"],
+            anchor="w",
+        ).grid(row=row, column=0, sticky="w", padx=(0, 12), pady=(0, 10))
 
     def _ask(self, event: object | None = None) -> str:
         question = self.question.get("1.0", tk.END).strip()
@@ -360,7 +554,7 @@ class LocalPilotPopup:
     def _set_busy(self, busy: bool) -> None:
         if busy:
             self.ask_button.configure(state=tk.DISABLED)
-            self.status.configure(text="Thinking with Ollama...")
+            self.status.configure(text=f"Thinking with {self.settings.model_provider.title()}...")
         else:
             self.ask_button.configure(state=tk.NORMAL)
             self.status.configure(text="Ctrl+Enter to ask")
