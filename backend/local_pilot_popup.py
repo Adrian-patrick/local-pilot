@@ -11,6 +11,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from app.agent import answer_question
 from app.config import get_settings
 from app.context_collector import collect_context
+from app.llm.base import LLMError
+from app.llm.model_discovery import list_models
 from app.settings_store import read_env_values, save_env_values
 
 
@@ -416,6 +418,7 @@ class LocalPilotPopup:
         form.columnconfigure(1, weight=1)
 
         entries: dict[str, tk.Entry] = {}
+        model_entries: dict[str, ttk.Combobox] = {}
         secret_keys = {"OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "GROQ_API_KEY"}
         provider_var = tk.StringVar(value=values.get("LOCAL_PILOT_MODEL_PROVIDER", self.settings.model_provider))
         fallback_var = tk.BooleanVar(
@@ -471,8 +474,8 @@ class LocalPilotPopup:
             ("Groq model", "GROQ_MODEL", self.settings.groq_model, False),
         ]
 
-        self._settings_entries(left, local_rows, values, entries, secret_keys)
-        self._settings_entries(right, cloud_rows, values, entries, secret_keys)
+        self._settings_entries(left, local_rows, values, entries, secret_keys, model_entries)
+        self._settings_entries(right, cloud_rows, values, entries, secret_keys, model_entries)
 
         key_status = self._key_status_text()
         tk.Label(
@@ -503,6 +506,33 @@ class LocalPilotPopup:
         buttons = tk.Frame(button_bar, bg=self.colors["bg"])
         buttons.grid(row=0, column=1, sticky="e")
 
+        def fetch_models() -> None:
+            provider = provider_var.get()
+            model_key = self._model_key_for_provider(provider)
+            if not model_key or model_key not in model_entries:
+                status.configure(text="Choose a provider with a model field first.")
+                return
+
+            overrides = {key: entry.get() for key, entry in entries.items() if entry.get()}
+            status.configure(text=f"Fetching {provider} models...")
+            dialog.update_idletasks()
+
+            try:
+                models = list_models(provider, overrides=overrides)
+            except LLMError as exc:
+                status.configure(text=f"Could not fetch models: {exc}")
+                return
+
+            if not models:
+                status.configure(text=f"No models found for {provider}.")
+                return
+
+            model_box = model_entries[model_key]
+            model_box.configure(values=models)
+            if model_box.get() not in models:
+                model_box.set(models[0])
+            status.configure(text=f"Loaded {len(models)} models for {provider}.")
+
         def save() -> None:
             updates = {
                 "LOCAL_PILOT_MODEL_PROVIDER": provider_var.get(),
@@ -517,8 +547,9 @@ class LocalPilotPopup:
             self._refresh_settings_view()
             status.configure(text="Saved. New questions will use these settings.")
 
-        ttk.Button(buttons, text="Save", style="Accent.TButton", command=save).grid(row=0, column=0, padx=(0, 8))
-        ttk.Button(buttons, text="Close", command=dialog.destroy).grid(row=0, column=1)
+        ttk.Button(buttons, text="Fetch models", command=fetch_models).grid(row=0, column=0, padx=(0, 8))
+        ttk.Button(buttons, text="Save", style="Accent.TButton", command=save).grid(row=0, column=1, padx=(0, 8))
+        ttk.Button(buttons, text="Close", command=dialog.destroy).grid(row=0, column=2)
 
     def _settings_section(self, parent: tk.Frame, title: str, row: int, column: int) -> tk.Frame:
         section = tk.Frame(parent, bg=self.colors["panel"])
@@ -541,24 +572,39 @@ class LocalPilotPopup:
         values: dict[str, str],
         entries: dict[str, tk.Entry],
         secret_keys: set[str],
+        model_entries: dict[str, ttk.Combobox],
     ) -> None:
         for row_index, (label, key, default, secret) in enumerate(rows, start=1):
             self._settings_label(parent, label, row_index)
-            entry = tk.Entry(
-                parent,
-                font=("Segoe UI", 10),
-                fg=self.colors["text"],
-                bg="#ffffff",
-                relief=tk.SOLID,
-                bd=1,
-                show="*" if secret else "",
-            )
+            if key.endswith("_MODEL") or key == "OLLAMA_MODEL":
+                entry = ttk.Combobox(parent, font=("Segoe UI", 10), values=())
+                model_entries[key] = entry
+            else:
+                entry = tk.Entry(
+                    parent,
+                    font=("Segoe UI", 10),
+                    fg=self.colors["text"],
+                    bg="#ffffff",
+                    relief=tk.SOLID,
+                    bd=1,
+                    show="*" if secret else "",
+                )
             if key in secret_keys:
                 entry.insert(0, "")
             else:
                 entry.insert(0, values.get(key, default or ""))
             entry.grid(row=row_index, column=1, sticky="ew", pady=(0, 9), ipady=4)
             entries[key] = entry
+
+    def _model_key_for_provider(self, provider: str) -> str | None:
+        return {
+            "ollama": "OLLAMA_MODEL",
+            "auto": "OLLAMA_MODEL",
+            "openai": "OPENAI_MODEL",
+            "anthropic": "ANTHROPIC_MODEL",
+            "gemini": "GEMINI_MODEL",
+            "groq": "GROQ_MODEL",
+        }.get(provider)
 
     def _key_status_text(self) -> str:
         statuses = [

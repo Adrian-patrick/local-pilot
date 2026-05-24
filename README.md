@@ -165,6 +165,7 @@ The backend also exposes provider settings for a future React/Electron settings 
 ```text
 GET  /settings
 POST /settings
+GET  /models?provider=ollama
 ```
 
 ## Local RAG Memory

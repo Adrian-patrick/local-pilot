@@ -49,3 +49,8 @@ class SettingsUpdateRequest(BaseModel):
     gemini_model: str | None = None
     groq_api_key: str | None = None
     groq_model: str | None = None
+
+
+class ModelsResponse(BaseModel):
+    provider: str
+    models: list[str]

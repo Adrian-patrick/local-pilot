@@ -6,9 +6,12 @@ from .schemas import (
     AskRequest,
     AskResponse,
     ContextResponse,
+    ModelsResponse,
     SettingsResponse,
     SettingsUpdateRequest,
 )
+from .llm.base import LLMError
+from .llm.model_discovery import list_models
 from .settings_store import save_env_values
 
 
@@ -26,6 +29,7 @@ def root() -> dict:
             "context": "/context?path=.",
             "ask": "POST /ask",
             "settings": "GET/POST /settings",
+            "models": "/models?provider=ollama",
         },
     }
 
@@ -73,6 +77,14 @@ def update_settings(request: SettingsUpdateRequest) -> dict:
         save_env_values(updates)
 
     return _settings_response(get_settings())
+
+
+@app.get("/models", response_model=ModelsResponse)
+def models(provider: str = "ollama") -> dict:
+    try:
+        return {"provider": provider, "models": list_models(provider)}
+    except LLMError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.get("/context", response_model=ContextResponse)
