@@ -341,8 +341,8 @@ class LocalPilotPopup:
         values = read_env_values()
         dialog = tk.Toplevel(self.root)
         dialog.title("Local Pilot Settings")
-        dialog.geometry("760x560")
-        dialog.minsize(700, 520)
+        dialog.geometry("940x620")
+        dialog.minsize(860, 560)
         dialog.configure(bg=self.colors["bg"])
         dialog.transient(self.root)
         dialog.grab_set()
@@ -414,8 +414,8 @@ class LocalPilotPopup:
             pady=14,
         )
         form.grid(row=2, column=0, sticky="nsew")
-        form.columnconfigure(0, weight=1)
-        form.columnconfigure(1, weight=1)
+        form.columnconfigure(0, weight=1, uniform="settings")
+        form.columnconfigure(1, weight=1, uniform="settings")
 
         entries: dict[str, tk.Entry] = {}
         model_entries: dict[str, ttk.Combobox] = {}
@@ -487,7 +487,7 @@ class LocalPilotPopup:
             try:
                 models = list_models(provider, overrides=overrides)
             except LLMError as exc:
-                status.configure(text=f"Could not fetch {provider} models: {exc}")
+                status.configure(text=self._friendly_model_error(provider, str(exc)))
                 return
 
             if not models:
@@ -512,7 +512,7 @@ class LocalPilotPopup:
             bg=self.colors["panel"],
             anchor="w",
             justify="left",
-            wraplength=310,
+            wraplength=380,
         ).grid(row=len(cloud_rows) + 1, column=0, columnspan=2, sticky="ew", pady=(4, 8))
 
         button_bar = tk.Frame(dialog, bg=self.colors["bg"], padx=22, pady=14)
@@ -526,6 +526,8 @@ class LocalPilotPopup:
             fg=self.colors["muted"],
             bg=self.colors["bg"],
             anchor="w",
+            justify="left",
+            wraplength=620,
         )
         status.grid(row=0, column=0, sticky="ew")
 
@@ -630,6 +632,16 @@ class LocalPilotPopup:
             ("Groq", bool(self.settings.groq_api_key)),
         ]
         return "Saved keys: " + ", ".join(f"{name} {'yes' if present else 'no'}" for name, present in statuses)
+
+    def _friendly_model_error(self, provider: str, error: str) -> str:
+        if "HTTP 403" in error:
+            return (
+                f"Could not fetch {provider} models: provider rejected access. "
+                "Check that the API key is correct and that the account has model-list access."
+            )
+        if "API key is required" in error:
+            return f"Add a {provider} API key first, then click Fetch."
+        return f"Could not fetch {provider} models: {error}"
 
     def _settings_label(self, parent: tk.Frame, text: str, row: int) -> None:
         tk.Label(
