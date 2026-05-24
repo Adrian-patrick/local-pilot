@@ -41,6 +41,19 @@ def list_models(provider: str, overrides: dict[str, str] | None = None) -> list[
 
 
 def test_provider(provider: str, overrides: dict[str, str] | None = None) -> str:
+    settings = get_settings()
+    values = overrides or {}
+    provider = provider.lower()
+
+    required_keys = {
+        "openai": values.get("OPENAI_API_KEY") or settings.openai_api_key,
+        "anthropic": values.get("ANTHROPIC_API_KEY") or settings.anthropic_api_key,
+        "gemini": values.get("GEMINI_API_KEY") or settings.gemini_api_key,
+        "groq": values.get("GROQ_API_KEY") or settings.groq_api_key,
+    }
+    if provider in required_keys and not required_keys[provider]:
+        raise LLMError(f"{provider.title()} API key is required to test this provider.")
+
     models = list_models(provider, overrides=overrides)
     if not models:
         raise LLMError(f"No models found for {provider}.")
