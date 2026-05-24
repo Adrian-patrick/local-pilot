@@ -484,7 +484,7 @@ class LocalPilotPopup:
             anchor="w",
             justify="left",
             wraplength=310,
-        ).grid(row=len(cloud_rows), column=0, columnspan=2, sticky="ew", pady=(2, 0))
+        ).grid(row=len(cloud_rows) + 1, column=0, columnspan=2, sticky="ew", pady=(4, 8))
 
         button_bar = tk.Frame(dialog, bg=self.colors["bg"], padx=22, pady=14)
         button_bar.grid(row=2, column=0, sticky="ew")
