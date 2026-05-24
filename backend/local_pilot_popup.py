@@ -12,7 +12,7 @@ from app.agent import answer_question
 from app.config import get_settings
 from app.context_collector import collect_context
 from app.llm.base import LLMError
-from app.llm.model_discovery import list_models
+from app.llm.model_discovery import list_models, test_provider
 from app.settings_store import read_env_values, save_env_values
 
 
@@ -511,8 +511,37 @@ class LocalPilotPopup:
                 model_box.set(models[0])
             status.configure(text=f"Loaded {len(models)} models for {provider}.")
 
-        self._settings_entries(left, local_rows, values, entries, secret_keys, model_entries, fetch_models_for)
-        self._settings_entries(right, cloud_rows, values, entries, secret_keys, model_entries, fetch_models_for)
+        def test_provider_for(provider: str) -> None:
+            overrides = {key: entry.get() for key, entry in entries.items() if entry.get()}
+            status.configure(text=f"Testing {provider} connection...")
+            dialog.update_idletasks()
+            try:
+                model = test_provider(provider, overrides=overrides)
+            except LLMError as exc:
+                status.configure(text=self._friendly_model_error(provider, str(exc)))
+                return
+            status.configure(text=f"{provider.title()} connection works. Example model: {model}")
+
+        self._settings_entries(
+            left,
+            local_rows,
+            values,
+            entries,
+            secret_keys,
+            model_entries,
+            fetch_models_for,
+            test_provider_for,
+        )
+        self._settings_entries(
+            right,
+            cloud_rows,
+            values,
+            entries,
+            secret_keys,
+            model_entries,
+            fetch_models_for,
+            test_provider_for,
+        )
 
         key_status = self._key_status_text()
         tk.Label(
@@ -567,6 +596,7 @@ class LocalPilotPopup:
         section.grid(row=row, column=column, sticky="nsew", padx=(0, 16) if column == 0 else (16, 0))
         section.columnconfigure(1, weight=1)
         section.columnconfigure(2, weight=0)
+        section.columnconfigure(3, weight=0)
         tk.Label(
             section,
             text=title,
@@ -586,6 +616,7 @@ class LocalPilotPopup:
         secret_keys: set[str],
         model_entries: dict[str, ttk.Combobox],
         fetch_models_for,
+        test_provider_for,
     ) -> None:
         for row_index, (label, key, default, secret) in enumerate(rows, start=1):
             self._settings_label(parent, label, row_index)
@@ -615,6 +646,11 @@ class LocalPilotPopup:
                     text="Fetch",
                     command=lambda value=provider: fetch_models_for(value),
                 ).grid(row=row_index, column=2, sticky="e", padx=(8, 0), pady=(0, 9))
+                ttk.Button(
+                    parent,
+                    text="Test",
+                    command=lambda value=provider: test_provider_for(value),
+                ).grid(row=row_index, column=3, sticky="e", padx=(8, 0), pady=(0, 9))
 
     def _model_key_for_provider(self, provider: str) -> str | None:
         return {

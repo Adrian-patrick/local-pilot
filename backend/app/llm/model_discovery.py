@@ -40,6 +40,13 @@ def list_models(provider: str, overrides: dict[str, str] | None = None) -> list[
     raise LLMError(f"Unsupported provider for model discovery: {provider}")
 
 
+def test_provider(provider: str, overrides: dict[str, str] | None = None) -> str:
+    models = list_models(provider, overrides=overrides)
+    if not models:
+        raise LLMError(f"No models found for {provider}.")
+    return models[0]
+
+
 def _ollama_models(base_url: str) -> list[str]:
     data = get_json(f"{base_url.rstrip('/')}/api/tags", headers={}, timeout=20)
     models = [item.get("name", "") for item in data.get("models", [])]
