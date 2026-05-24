@@ -7,11 +7,13 @@ from .schemas import (
     AskResponse,
     ContextResponse,
     ModelsResponse,
+    SetupStatusResponse,
     SettingsResponse,
     SettingsUpdateRequest,
 )
 from .llm.base import LLMError
 from .llm.model_discovery import list_models
+from .setup_check import get_setup_status
 from .settings_store import save_env_values
 
 
@@ -30,6 +32,7 @@ def root() -> dict:
             "ask": "POST /ask",
             "settings": "GET/POST /settings",
             "models": "/models?provider=ollama",
+            "setup": "/setup/status",
         },
     }
 
@@ -85,6 +88,11 @@ def models(provider: str = "ollama") -> dict:
         return {"provider": provider, "models": list_models(provider)}
     except LLMError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/setup/status", response_model=SetupStatusResponse)
+def setup_status() -> dict:
+    return get_setup_status().to_dict()
 
 
 @app.get("/context", response_model=ContextResponse)

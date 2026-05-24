@@ -31,6 +31,7 @@ local-pilot/
       main.py              FastAPI app
       agent.py             Stage 1 answer runtime
       rag_engine.py        Local corrective RAG flow
+      setup_check.py       First-run readiness checks
       llm/                 Model router for Ollama/OpenAI/Claude/Gemini/Groq
       rag_store.py         SQLite item memory and chunk store
       context_collector.py File/folder context and readable content collection
@@ -78,10 +79,10 @@ curl -X POST http://127.0.0.1:8000/ask ^
 
 ## Add Windows Context Menu Entry
 
-For development, double-click:
+For development, run:
 
 ```text
-desktop/registry/add-local-pilot-dev.reg
+powershell.exe -ExecutionPolicy Bypass -File desktop/registry/install-local-pilot-dev.ps1
 ```
 
 Then:
@@ -112,6 +113,7 @@ ollama pull qwen3:4b
 If `ollama` is not recognized in PowerShell, open the Ollama app once or restart your terminal after installing Ollama.
 
 The popup also has a `Settings` button where you can choose the model provider, change model names, and add API keys.
+Use the `Setup` button to check whether Ollama, the context menu, the selected provider, and local memory are ready.
 
 ## AI Providers
 
@@ -166,6 +168,7 @@ The backend also exposes provider settings for a future React/Electron settings 
 GET  /settings
 POST /settings
 GET  /models?provider=ollama
+GET  /setup/status
 ```
 
 ## Local RAG Memory

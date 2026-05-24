@@ -54,3 +54,15 @@ class SettingsUpdateRequest(BaseModel):
 class ModelsResponse(BaseModel):
     provider: str
     models: list[str]
+
+
+class SetupCheckResponse(BaseModel):
+    name: str
+    ok: bool
+    detail: str
+    action: str
+
+
+class SetupStatusResponse(BaseModel):
+    ready: bool
+    checks: list[SetupCheckResponse]

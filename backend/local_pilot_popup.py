@@ -13,6 +13,7 @@ from app.config import get_settings
 from app.context_collector import collect_context
 from app.llm.base import LLMError
 from app.llm.model_discovery import list_models, test_provider
+from app.setup_check import get_setup_status
 from app.settings_store import read_env_values, save_env_values
 
 
@@ -134,6 +135,13 @@ class LocalPilotPopup:
             style="Ghost.TButton",
             command=self._open_settings,
         ).grid(row=0, column=1, sticky="e")
+
+        ttk.Button(
+            provider_area,
+            text="Setup",
+            style="Ghost.TButton",
+            command=self._open_setup,
+        ).grid(row=0, column=2, sticky="e", padx=(8, 0))
 
         context_card = tk.Frame(
             shell,
@@ -336,6 +344,141 @@ class LocalPilotPopup:
         self.settings = get_settings()
         self.provider_badge.configure(text=self._provider_badge_text())
         self.privacy_label.configure(text=self._privacy_text())
+
+    def _open_setup(self) -> None:
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Local Pilot Setup")
+        dialog.geometry("760x560")
+        dialog.minsize(680, 460)
+        dialog.configure(bg=self.colors["bg"])
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.columnconfigure(0, weight=1)
+        dialog.rowconfigure(1, weight=1)
+
+        header = tk.Frame(dialog, bg=self.colors["bg"], padx=22, pady=18)
+        header.grid(row=0, column=0, sticky="ew")
+        header.columnconfigure(0, weight=1)
+
+        title = tk.Label(
+            header,
+            text="Setup Status",
+            font=("Segoe UI", 16, "bold"),
+            fg=self.colors["text"],
+            bg=self.colors["bg"],
+            anchor="w",
+        )
+        title.grid(row=0, column=0, sticky="ew")
+
+        subtitle = tk.Label(
+            header,
+            text="Check whether Local Pilot is ready for right-click AI workflows.",
+            font=("Segoe UI", 9),
+            fg=self.colors["muted"],
+            bg=self.colors["bg"],
+            anchor="w",
+        )
+        subtitle.grid(row=1, column=0, sticky="ew", pady=(4, 0))
+
+        checks_panel = tk.Frame(
+            dialog,
+            bg=self.colors["panel"],
+            highlightbackground=self.colors["border"],
+            highlightthickness=1,
+            padx=14,
+            pady=14,
+        )
+        checks_panel.grid(row=1, column=0, sticky="nsew", padx=22)
+        checks_panel.columnconfigure(0, weight=1)
+
+        footer = tk.Frame(dialog, bg=self.colors["bg"], padx=22, pady=14)
+        footer.grid(row=2, column=0, sticky="ew")
+        footer.columnconfigure(0, weight=1)
+
+        status = tk.Label(
+            footer,
+            text="",
+            font=("Segoe UI", 9),
+            fg=self.colors["muted"],
+            bg=self.colors["bg"],
+            anchor="w",
+        )
+        status.grid(row=0, column=0, sticky="ew")
+
+        def clear_checks() -> None:
+            for child in checks_panel.winfo_children():
+                child.destroy()
+
+        def render() -> None:
+            clear_checks()
+            status.configure(text="Running setup checks...")
+            dialog.update_idletasks()
+            setup_status = get_setup_status()
+            title.configure(text="Setup Status: Ready" if setup_status.ready else "Setup Status: Needs Attention")
+            status.configure(
+                text="Local Pilot is ready." if setup_status.ready else "Fix the items marked Needs attention."
+            )
+
+            for row_index, check in enumerate(setup_status.checks):
+                row = tk.Frame(checks_panel, bg=self.colors["panel"])
+                row.grid(row=row_index, column=0, sticky="ew", pady=(0, 12))
+                row.columnconfigure(1, weight=1)
+
+                badge_text = "OK" if check.ok else "Needs attention"
+                badge_bg = "#dcfce7" if check.ok else "#fee2e2"
+                badge_fg = "#166534" if check.ok else "#991b1b"
+
+                tk.Label(
+                    row,
+                    text=badge_text,
+                    font=("Segoe UI", 8, "bold"),
+                    fg=badge_fg,
+                    bg=badge_bg,
+                    padx=8,
+                    pady=4,
+                ).grid(row=0, column=0, sticky="nw", padx=(0, 12))
+
+                text_block = tk.Frame(row, bg=self.colors["panel"])
+                text_block.grid(row=0, column=1, sticky="ew")
+                text_block.columnconfigure(0, weight=1)
+
+                tk.Label(
+                    text_block,
+                    text=check.name,
+                    font=("Segoe UI", 10, "bold"),
+                    fg=self.colors["text"],
+                    bg=self.colors["panel"],
+                    anchor="w",
+                ).grid(row=0, column=0, sticky="ew")
+                tk.Label(
+                    text_block,
+                    text=check.detail,
+                    font=("Segoe UI", 9),
+                    fg=self.colors["muted"],
+                    bg=self.colors["panel"],
+                    anchor="w",
+                    justify="left",
+                    wraplength=590,
+                ).grid(row=1, column=0, sticky="ew", pady=(2, 0))
+                if not check.ok:
+                    tk.Label(
+                        text_block,
+                        text=f"Action: {check.action}",
+                        font=("Segoe UI", 9, "bold"),
+                        fg=self.colors["brand"],
+                        bg=self.colors["panel"],
+                        anchor="w",
+                        justify="left",
+                        wraplength=590,
+                    ).grid(row=2, column=0, sticky="ew", pady=(4, 0))
+
+        buttons = tk.Frame(footer, bg=self.colors["bg"])
+        buttons.grid(row=0, column=1, sticky="e")
+        ttk.Button(buttons, text="Refresh", command=render).grid(row=0, column=0, padx=(0, 8))
+        ttk.Button(buttons, text="Settings", command=self._open_settings).grid(row=0, column=1, padx=(0, 8))
+        ttk.Button(buttons, text="Close", command=dialog.destroy).grid(row=0, column=2)
+
+        render()
 
     def _open_settings(self) -> None:
         values = read_env_values()
