@@ -56,6 +56,7 @@ def _ollama_models(base_url: str) -> list[str]:
 def _openai_models(api_key: str | None) -> list[str]:
     if not api_key:
         raise LLMError("OpenAI API key is required to fetch models.")
+    api_key = api_key.strip()
     data = get_json(
         "https://api.openai.com/v1/models",
         headers={"Authorization": f"Bearer {api_key}"},
@@ -68,6 +69,7 @@ def _openai_models(api_key: str | None) -> list[str]:
 def _groq_models(api_key: str | None) -> list[str]:
     if not api_key:
         return GROQ_FALLBACK_MODELS
+    api_key = api_key.strip()
     data = get_json(
         "https://api.groq.com/openai/v1/models",
         headers={"Authorization": f"Bearer {api_key}"},
@@ -80,6 +82,7 @@ def _groq_models(api_key: str | None) -> list[str]:
 def _gemini_models(api_key: str | None) -> list[str]:
     if not api_key:
         raise LLMError("Gemini API key is required to fetch models.")
+    api_key = api_key.strip()
     data = get_json(
         f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}",
         headers={},

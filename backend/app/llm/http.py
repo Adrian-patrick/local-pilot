@@ -6,12 +6,16 @@ import urllib.request
 
 from .base import LLMError
 
+_DEFAULT_HEADERS = {
+    "User-Agent": "LocalPilot/1.0",
+}
+
 
 def post_json(url: str, payload: dict, headers: dict, timeout: int) -> dict:
     request = urllib.request.Request(
         url,
         data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json", **headers},
+        headers={**_DEFAULT_HEADERS, "Content-Type": "application/json", **headers},
         method="POST",
     )
 
@@ -30,7 +34,7 @@ def post_json(url: str, payload: dict, headers: dict, timeout: int) -> dict:
 def get_json(url: str, headers: dict, timeout: int) -> dict:
     request = urllib.request.Request(
         url,
-        headers=headers,
+        headers={**_DEFAULT_HEADERS, **headers},
         method="GET",
     )
 
