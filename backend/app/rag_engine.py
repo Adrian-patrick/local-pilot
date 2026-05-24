@@ -4,13 +4,12 @@ import re
 
 from .context_collector import collect_context
 from .llm import LLMError, generate_text
+from .rag import chunk_text, retrieve_chunks, terms
 from .rag_store import (
     connect,
     content_hash,
     create_workspace,
     get_item,
-    load_chunks,
-    load_history,
     load_workspace_chunks,
     load_workspace_history,
     path_id,
@@ -20,8 +19,6 @@ from .rag_store import (
 )
 
 
-CHUNK_SIZE = 1_400
-CHUNK_OVERLAP = 180
 TOP_K = 6
 MAX_CONTEXT_CHARS = 8_000
 
@@ -109,7 +106,7 @@ def _ensure_indexed(context: dict) -> str:
         if existing and existing["content_hash"] == item_hash:
             return item_id
 
-        chunks = _chunk_text(text, source=context["path"])
+        chunks = chunk_text(text, source=context["path"])
         upsert_item(
             con,
             item_id=item_id,
@@ -121,53 +118,6 @@ def _ensure_indexed(context: dict) -> str:
         replace_chunks(con, item_id, chunks)
 
     return item_id
-
-
-def _chunk_text(text: str, source: str) -> list[dict]:
-    clean = _normalize_text(text)
-    if not clean:
-        return []
-
-    chunks: list[dict] = []
-    start = 0
-    chunk_index = 0
-    while start < len(clean):
-        end = min(start + CHUNK_SIZE, len(clean))
-        chunk_text = clean[start:end].strip()
-        if chunk_text:
-            chunks.append(
-                {
-                    "chunk_index": chunk_index,
-                    "text": chunk_text,
-                    "source": source,
-                    "metadata": {},
-                }
-            )
-            chunk_index += 1
-        if end >= len(clean):
-            break
-        start = max(0, end - CHUNK_OVERLAP)
-
-    return chunks
-
-
-def retrieve_chunks(question: str, chunks: list[dict], top_k: int = TOP_K) -> list[dict]:
-    query_terms = _terms(question)
-    scored = []
-
-    for chunk in chunks:
-        text = chunk["text"]
-        chunk_terms = _terms(text)
-        exact_hits = sum(text.lower().count(term) for term in query_terms)
-        overlap = len(query_terms & chunk_terms)
-        density = overlap / max(1, len(query_terms))
-        score = exact_hits * 2.0 + overlap + density
-        scored.append((score, chunk))
-
-    ranked = [chunk for score, chunk in sorted(scored, key=lambda item: item[0], reverse=True) if score > 0]
-    if not ranked:
-        ranked = chunks[:top_k]
-    return ranked[:top_k]
 
 
 def _deterministic_answer(question: str, chunks: list[dict], extracted_text: str = "") -> str | None:
@@ -290,14 +240,6 @@ def _clean_section_lines(section: str, skip_headers: tuple[str, ...] = ()) -> li
         if line not in lines:
             lines.append(line)
     return lines
-
-
-def _merge_unique(first: list[str], second: list[str]) -> list[str]:
-    merged = list(first)
-    for item in second:
-        if item not in merged:
-            merged.append(item)
-    return merged
 
 
 def _generate_corrected_answer(
@@ -434,8 +376,8 @@ def _validate_answer(answer: str, chunks: list[dict]) -> tuple[str, str]:
     if "i don't see" in lowered or "not in the selected document" in lowered:
         return "PASS", "Answer correctly says the document lacks the information."
 
-    context_terms = _terms(" ".join(chunk["text"] for chunk in chunks))
-    answer_terms = {term for term in _terms(answer) if len(term) >= 5}
+    context_terms = set(terms(" ".join(chunk["text"] for chunk in chunks)))
+    answer_terms = {term for term in terms(answer) if len(term) >= 5}
     if not answer_terms:
         return "PASS", "Short answer."
 
@@ -444,46 +386,6 @@ def _validate_answer(answer: str, chunks: list[dict]) -> tuple[str, str]:
     if unsupported_ratio > 0.65:
         return "FAIL", "Too many answer terms are not present in retrieved context."
     return "PASS", "Answer appears grounded in retrieved context."
-
-
-def _terms(text: str) -> set[str]:
-    stopwords = {
-        "about",
-        "after",
-        "again",
-        "also",
-        "because",
-        "before",
-        "being",
-        "could",
-        "document",
-        "from",
-        "have",
-        "into",
-        "only",
-        "selected",
-        "that",
-        "their",
-        "there",
-        "these",
-        "this",
-        "using",
-        "what",
-        "when",
-        "where",
-        "which",
-        "with",
-        "would",
-    }
-    return {
-        token
-        for token in re.findall(r"[a-zA-Z0-9_+#.-]{3,}", text.lower())
-        if token not in stopwords
-    }
-
-
-def _normalize_text(text: str) -> str:
-    return re.sub(r"\n{3,}", "\n\n", text.strip())
 
 
 def _setup_help(workspace: dict, question: str, error: str) -> str:
