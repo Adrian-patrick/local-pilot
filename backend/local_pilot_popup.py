@@ -507,7 +507,7 @@ class LocalPilotPopup:
         buttons.grid(row=0, column=1, sticky="e")
 
         def fetch_models() -> None:
-            provider = provider_var.get()
+            provider = self._provider_for_model_fetch(provider_var.get(), entries)
             model_key = self._model_key_for_provider(provider)
             if not model_key or model_key not in model_entries:
                 status.configure(text="Choose a provider with a model field first.")
@@ -605,6 +605,21 @@ class LocalPilotPopup:
             "gemini": "GEMINI_MODEL",
             "groq": "GROQ_MODEL",
         }.get(provider)
+
+    def _provider_for_model_fetch(self, selected_provider: str, entries: dict[str, tk.Entry]) -> str:
+        typed_key_providers = [
+            provider
+            for key, provider in (
+                ("OPENAI_API_KEY", "openai"),
+                ("ANTHROPIC_API_KEY", "anthropic"),
+                ("GEMINI_API_KEY", "gemini"),
+                ("GROQ_API_KEY", "groq"),
+            )
+            if entries.get(key) and entries[key].get().strip()
+        ]
+        if len(typed_key_providers) == 1:
+            return typed_key_providers[0]
+        return selected_provider
 
     def _key_status_text(self) -> str:
         statuses = [
