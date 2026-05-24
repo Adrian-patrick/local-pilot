@@ -339,16 +339,18 @@ class LocalPilotPopup:
         values = read_env_values()
         dialog = tk.Toplevel(self.root)
         dialog.title("Local Pilot Settings")
-        dialog.geometry("620x640")
-        dialog.minsize(560, 540)
+        dialog.geometry("760x560")
+        dialog.minsize(700, 520)
         dialog.configure(bg=self.colors["bg"])
         dialog.transient(self.root)
         dialog.grab_set()
 
         dialog.columnconfigure(0, weight=1)
+        dialog.rowconfigure(0, weight=1)
         body = tk.Frame(dialog, bg=self.colors["bg"], padx=22, pady=20)
         body.grid(row=0, column=0, sticky="nsew")
         body.columnconfigure(0, weight=1)
+        body.rowconfigure(2, weight=1)
 
         tk.Label(
             body,
@@ -361,20 +363,29 @@ class LocalPilotPopup:
 
         tk.Label(
             body,
-            text="Local mode is private. Cloud mode can send selected file chunks to the API provider.",
+            text="Local mode is private. Cloud mode can send selected file chunks to the API provider. Leave key fields blank to keep saved keys.",
             font=("Segoe UI", 9),
             fg=self.colors["muted"],
             bg=self.colors["bg"],
             anchor="w",
-            wraplength=560,
+            wraplength=700,
             justify="left",
         ).grid(row=1, column=0, sticky="ew", pady=(4, 14))
 
-        form = tk.Frame(body, bg=self.colors["panel"], highlightbackground=self.colors["border"], highlightthickness=1, padx=16, pady=14)
-        form.grid(row=2, column=0, sticky="ew")
+        form = tk.Frame(
+            body,
+            bg=self.colors["panel"],
+            highlightbackground=self.colors["border"],
+            highlightthickness=1,
+            padx=16,
+            pady=14,
+        )
+        form.grid(row=2, column=0, sticky="nsew")
+        form.columnconfigure(0, weight=1)
         form.columnconfigure(1, weight=1)
 
         entries: dict[str, tk.Entry] = {}
+        secret_keys = {"OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "GROQ_API_KEY"}
         provider_var = tk.StringVar(value=values.get("LOCAL_PILOT_MODEL_PROVIDER", self.settings.model_provider))
         fallback_var = tk.BooleanVar(
             value=values.get(
@@ -384,47 +395,24 @@ class LocalPilotPopup:
             in {"1", "true", "yes", "on"}
         )
 
-        self._settings_label(form, "Provider", 0)
+        top = tk.Frame(form, bg=self.colors["panel"])
+        top.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 12))
+        top.columnconfigure(1, weight=1)
+        top.columnconfigure(3, weight=1)
+
+        self._settings_label(top, "Provider", 0)
         provider_box = ttk.Combobox(
-            form,
+            top,
             textvariable=provider_var,
             values=("ollama", "auto", "openai", "anthropic", "gemini", "groq"),
             state="readonly",
             font=("Segoe UI", 10),
         )
-        provider_box.grid(row=0, column=1, sticky="ew", pady=(0, 10))
-
-        rows = [
-            ("Ollama URL", "OLLAMA_BASE_URL", self.settings.ollama_base_url, False),
-            ("Ollama model", "OLLAMA_MODEL", self.settings.ollama_model, False),
-            ("OpenAI key", "OPENAI_API_KEY", self.settings.openai_api_key or "", True),
-            ("OpenAI model", "OPENAI_MODEL", self.settings.openai_model, False),
-            ("Claude key", "ANTHROPIC_API_KEY", self.settings.anthropic_api_key or "", True),
-            ("Claude model", "ANTHROPIC_MODEL", self.settings.anthropic_model, False),
-            ("Gemini key", "GEMINI_API_KEY", self.settings.gemini_api_key or "", True),
-            ("Gemini model", "GEMINI_MODEL", self.settings.gemini_model, False),
-            ("Groq key", "GROQ_API_KEY", self.settings.groq_api_key or "", True),
-            ("Groq model", "GROQ_MODEL", self.settings.groq_model, False),
-        ]
-
-        for row_index, (label, key, default, secret) in enumerate(rows, start=1):
-            self._settings_label(form, label, row_index)
-            entry = tk.Entry(
-                form,
-                font=("Segoe UI", 10),
-                fg=self.colors["text"],
-                bg="#ffffff",
-                relief=tk.SOLID,
-                bd=1,
-                show="*" if secret else "",
-            )
-            entry.insert(0, values.get(key, default or ""))
-            entry.grid(row=row_index, column=1, sticky="ew", pady=(0, 10), ipady=5)
-            entries[key] = entry
+        provider_box.grid(row=0, column=1, sticky="ew", padx=(0, 18))
 
         fallback = tk.Checkbutton(
-            form,
-            text="Allow cloud fallback when auto mode cannot use Ollama",
+            top,
+            text="Allow cloud fallback in auto mode",
             variable=fallback_var,
             fg=self.colors["text"],
             bg=self.colors["panel"],
@@ -432,33 +420,123 @@ class LocalPilotPopup:
             font=("Segoe UI", 9),
             anchor="w",
         )
-        fallback.grid(row=len(rows) + 1, column=1, sticky="w", pady=(0, 4))
+        fallback.grid(row=0, column=2, columnspan=2, sticky="w")
+
+        left = self._settings_section(form, "Local Ollama", 1, 0)
+        right = self._settings_section(form, "Cloud Providers", 1, 1)
+
+        local_rows = [
+            ("Ollama URL", "OLLAMA_BASE_URL", self.settings.ollama_base_url, False),
+            ("Ollama model", "OLLAMA_MODEL", self.settings.ollama_model, False),
+        ]
+        cloud_rows = [
+            ("OpenAI key", "OPENAI_API_KEY", "", True),
+            ("OpenAI model", "OPENAI_MODEL", self.settings.openai_model, False),
+            ("Claude key", "ANTHROPIC_API_KEY", "", True),
+            ("Claude model", "ANTHROPIC_MODEL", self.settings.anthropic_model, False),
+            ("Gemini key", "GEMINI_API_KEY", "", True),
+            ("Gemini model", "GEMINI_MODEL", self.settings.gemini_model, False),
+            ("Groq key", "GROQ_API_KEY", "", True),
+            ("Groq model", "GROQ_MODEL", self.settings.groq_model, False),
+        ]
+
+        self._settings_entries(left, local_rows, values, entries, secret_keys)
+        self._settings_entries(right, cloud_rows, values, entries, secret_keys)
+
+        key_status = self._key_status_text()
+        tk.Label(
+            right,
+            text=key_status,
+            font=("Segoe UI", 8),
+            fg=self.colors["muted"],
+            bg=self.colors["panel"],
+            anchor="w",
+            justify="left",
+            wraplength=310,
+        ).grid(row=len(cloud_rows), column=0, columnspan=2, sticky="ew", pady=(2, 0))
+
+        button_bar = tk.Frame(body, bg=self.colors["bg"])
+        button_bar.grid(row=3, column=0, sticky="ew", pady=(12, 0))
+        button_bar.columnconfigure(0, weight=1)
 
         status = tk.Label(
-            body,
+            button_bar,
             text="",
             font=("Segoe UI", 9),
             fg=self.colors["muted"],
             bg=self.colors["bg"],
             anchor="w",
         )
-        status.grid(row=3, column=0, sticky="ew", pady=(10, 0))
+        status.grid(row=0, column=0, sticky="ew")
 
-        buttons = tk.Frame(body, bg=self.colors["bg"])
-        buttons.grid(row=4, column=0, sticky="e", pady=(14, 0))
+        buttons = tk.Frame(button_bar, bg=self.colors["bg"])
+        buttons.grid(row=0, column=1, sticky="e")
 
         def save() -> None:
             updates = {
                 "LOCAL_PILOT_MODEL_PROVIDER": provider_var.get(),
                 "LOCAL_PILOT_ALLOW_CLOUD_FALLBACK": str(fallback_var.get()).lower(),
             }
-            updates.update({key: entry.get() for key, entry in entries.items()})
+            for key, entry in entries.items():
+                value = entry.get()
+                if key in secret_keys and not value:
+                    continue
+                updates[key] = value
             save_env_values(updates)
             self._refresh_settings_view()
             status.configure(text="Saved. New questions will use these settings.")
 
         ttk.Button(buttons, text="Save", style="Accent.TButton", command=save).grid(row=0, column=0, padx=(0, 8))
         ttk.Button(buttons, text="Close", command=dialog.destroy).grid(row=0, column=1)
+
+    def _settings_section(self, parent: tk.Frame, title: str, row: int, column: int) -> tk.Frame:
+        section = tk.Frame(parent, bg=self.colors["panel"])
+        section.grid(row=row, column=column, sticky="nsew", padx=(0, 16) if column == 0 else (16, 0))
+        section.columnconfigure(1, weight=1)
+        tk.Label(
+            section,
+            text=title,
+            font=("Segoe UI", 10, "bold"),
+            fg=self.colors["brand"],
+            bg=self.colors["panel"],
+            anchor="w",
+        ).grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 10))
+        return section
+
+    def _settings_entries(
+        self,
+        parent: tk.Frame,
+        rows: list[tuple[str, str, str, bool]],
+        values: dict[str, str],
+        entries: dict[str, tk.Entry],
+        secret_keys: set[str],
+    ) -> None:
+        for row_index, (label, key, default, secret) in enumerate(rows, start=1):
+            self._settings_label(parent, label, row_index)
+            entry = tk.Entry(
+                parent,
+                font=("Segoe UI", 10),
+                fg=self.colors["text"],
+                bg="#ffffff",
+                relief=tk.SOLID,
+                bd=1,
+                show="*" if secret else "",
+            )
+            if key in secret_keys:
+                entry.insert(0, "")
+            else:
+                entry.insert(0, values.get(key, default or ""))
+            entry.grid(row=row_index, column=1, sticky="ew", pady=(0, 9), ipady=4)
+            entries[key] = entry
+
+    def _key_status_text(self) -> str:
+        statuses = [
+            ("OpenAI", bool(self.settings.openai_api_key)),
+            ("Claude", bool(self.settings.anthropic_api_key)),
+            ("Gemini", bool(self.settings.gemini_api_key)),
+            ("Groq", bool(self.settings.groq_api_key)),
+        ]
+        return "Saved keys: " + ", ".join(f"{name} {'yes' if present else 'no'}" for name, present in statuses)
 
     def _settings_label(self, parent: tk.Frame, text: str, row: int) -> None:
         tk.Label(
