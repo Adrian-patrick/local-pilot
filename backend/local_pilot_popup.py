@@ -1145,7 +1145,7 @@ class LocalPilotPopup:
     def _submit_question(self, question: str) -> None:
         self.question.delete("1.0", tk.END)
         self.placeholder_active = False
-        self._show_placeholder()
+        self.question.configure(fg=self.colors["text"])
         self._append("You", question)
         self._set_busy(True)
 
@@ -1254,7 +1254,10 @@ class LocalPilotPopup:
         return min(720, max(420, canvas_width - 220))
 
     def _show_placeholder(self) -> None:
+        if self.root.focus_get() == self.question:
+            return
         self.placeholder_active = True
+        self.question.delete("1.0", tk.END)
         self.question.insert("1.0", self.input_placeholder)
         self.question.configure(fg=self.colors["muted"])
 
