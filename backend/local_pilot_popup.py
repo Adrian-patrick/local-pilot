@@ -23,11 +23,13 @@ class LocalPilotPopup:
         self.messages: queue.Queue[tuple[str, str]] = queue.Queue()
         self.context_summary = "Loading selected item..."
         self.settings = get_settings()
+        self.input_placeholder = "Ask anything about this file or folder..."
+        self.placeholder_active = False
 
         self.root = tk.Tk()
         self.root.title("Local Pilot")
-        self.root.geometry("860x660")
-        self.root.minsize(680, 500)
+        self.root.geometry("940x720")
+        self.root.minsize(760, 560)
         self.root.configure(bg="#f5f7fb")
 
         self.colors = {
@@ -41,6 +43,9 @@ class LocalPilotPopup:
             "assistant": "#ffffff",
             "user": "#e8f0ff",
             "input": "#ffffff",
+            "canvas": "#f8fafc",
+            "assistant_border": "#e2e8f0",
+            "user_border": "#bfdbfe",
         }
 
         self._configure_style()
@@ -85,7 +90,7 @@ class LocalPilotPopup:
         shell = tk.Frame(self.root, bg=self.colors["bg"], padx=22, pady=20)
         shell.grid(row=0, column=0, rowspan=4, sticky="nsew")
         shell.columnconfigure(0, weight=1)
-        shell.rowconfigure(1, weight=1)
+        shell.rowconfigure(3, weight=1)
 
         header = tk.Frame(shell, bg=self.colors["bg"])
         header.grid(row=0, column=0, sticky="ew", pady=(0, 14))
@@ -190,24 +195,28 @@ class LocalPilotPopup:
 
         actions = tk.Frame(shell, bg=self.colors["bg"])
         actions.grid(row=2, column=0, sticky="ew", pady=(0, 12))
-        actions.columnconfigure(4, weight=1)
+        actions.columnconfigure(5, weight=1)
 
         quick_actions = [
             (
-                "Overview",
+                "Summary",
                 "Give a concise overview of the selected file in 5 bullets. Use only information from the file.",
             ),
             (
-                "Key Points",
-                "Extract the key points from the selected file. Group related points when helpful. Do not add outside information.",
+                "Experience",
+                "List the work, internship, and research experience from the selected file. Include role, organization, timeframe when present, and concrete work done.",
             ),
             (
-                "Find Items",
-                "List the important named items in this file, such as projects, sections, entities, tasks, or records. Include short descriptions only when the file provides them.",
+                "Projects",
+                "List the projects in the selected file. Include only actual project names with one-line descriptions when available.",
             ),
             (
                 "Actions",
                 "Extract action items, decisions, requirements, risks, or next steps from this file. If none are present, say so.",
+            ),
+            (
+                "History",
+                "Was there any past conversation for this selected file or workspace?",
             ),
         ]
         for index, (label, prompt) in enumerate(quick_actions):
@@ -235,14 +244,14 @@ class LocalPilotPopup:
         chat_panel.columnconfigure(0, weight=1)
         chat_panel.rowconfigure(0, weight=1)
 
-        self.chat_canvas = tk.Canvas(chat_panel, bg=self.colors["panel"], highlightthickness=0)
+        self.chat_canvas = tk.Canvas(chat_panel, bg=self.colors["canvas"], highlightthickness=0)
         self.chat_canvas.grid(row=0, column=0, sticky="nsew")
 
         scrollbar = ttk.Scrollbar(chat_panel, orient="vertical", command=self.chat_canvas.yview)
         scrollbar.grid(row=0, column=1, sticky="ns")
         self.chat_canvas.configure(yscrollcommand=scrollbar.set)
 
-        self.messages_frame = tk.Frame(self.chat_canvas, bg=self.colors["panel"], padx=14, pady=14)
+        self.messages_frame = tk.Frame(self.chat_canvas, bg=self.colors["canvas"], padx=16, pady=16)
         self.messages_window = self.chat_canvas.create_window(
             (0, 0), window=self.messages_frame, anchor="nw"
         )
@@ -274,7 +283,11 @@ class LocalPilotPopup:
             insertbackground=self.colors["brand"],
         )
         self.question.grid(row=0, column=0, sticky="ew", padx=(0, 12))
+        self._show_placeholder()
         self.question.bind("<Control-Return>", self._ask)
+        self.question.bind("<Return>", self._ask_on_enter)
+        self.question.bind("<FocusIn>", self._clear_placeholder)
+        self.question.bind("<FocusOut>", self._restore_placeholder)
 
         self.ask_button = ttk.Button(
             input_card,
@@ -290,7 +303,7 @@ class LocalPilotPopup:
 
         self.status = tk.Label(
             footer,
-            text="Ctrl+Enter to ask",
+            text="Enter to ask, Shift+Enter for a new line",
             font=("Segoe UI", 9),
             fg=self.colors["muted"],
             bg=self.colors["bg"],
@@ -854,6 +867,8 @@ class LocalPilotPopup:
         ).grid(row=row, column=0, sticky="w", padx=(0, 12), pady=(0, 10))
 
     def _ask(self, event: object | None = None) -> str:
+        if self.placeholder_active:
+            return "break"
         question = self.question.get("1.0", tk.END).strip()
         if not question:
             return "break"
@@ -861,11 +876,18 @@ class LocalPilotPopup:
         self._submit_question(question)
         return "break"
 
+    def _ask_on_enter(self, event: tk.Event) -> str | None:
+        if event.state & 0x0001:
+            return None
+        return self._ask(event)
+
     def _ask_prompt(self, prompt: str) -> None:
         self._submit_question(prompt)
 
     def _submit_question(self, question: str) -> None:
         self.question.delete("1.0", tk.END)
+        self.placeholder_active = False
+        self._show_placeholder()
         self._append("You", question)
         self._set_busy(True)
 
@@ -897,30 +919,47 @@ class LocalPilotPopup:
 
     def _append(self, sender: str, text: str) -> None:
         is_user = sender == "You"
-        row = tk.Frame(self.messages_frame, bg=self.colors["panel"])
+        row = tk.Frame(self.messages_frame, bg=self.colors["canvas"])
         row.pack(fill="x", pady=(0, 12))
         row.columnconfigure(0, weight=1)
 
         bubble = tk.Frame(
             row,
             bg=self.colors["user"] if is_user else self.colors["assistant"],
-            highlightbackground="#c7d2fe" if is_user else self.colors["border"],
+            highlightbackground=self.colors["user_border"] if is_user else self.colors["assistant_border"],
             highlightthickness=1,
             padx=12,
             pady=10,
         )
-        bubble.grid(row=0, column=0, sticky="e" if is_user else "w")
+        bubble.grid(row=0, column=0, sticky="e" if is_user else "w", padx=(80, 0) if is_user else (0, 80))
+
+        top_line = tk.Frame(bubble, bg=bubble["bg"])
+        top_line.pack(fill="x", anchor="w")
 
         tk.Label(
-            bubble,
+            top_line,
             text=sender,
             font=("Segoe UI", 9, "bold"),
             fg=self.colors["brand"] if not is_user else self.colors["brand_dark"],
             bg=bubble["bg"],
             anchor="w",
-        ).pack(fill="x", anchor="w")
+        ).pack(side=tk.LEFT, anchor="w")
 
-        tk.Label(
+        if not is_user and text:
+            tk.Button(
+                top_line,
+                text="Copy",
+                font=("Segoe UI", 8, "bold"),
+                fg=self.colors["muted"],
+                bg=bubble["bg"],
+                activebackground=bubble["bg"],
+                relief=tk.FLAT,
+                padx=6,
+                pady=0,
+                command=lambda value=text: self._copy_text(value),
+            ).pack(side=tk.RIGHT, anchor="e")
+
+        tk.Message(
             bubble,
             text=text,
             font=("Segoe UI", 10),
@@ -928,8 +967,8 @@ class LocalPilotPopup:
             bg=bubble["bg"],
             justify="left",
             anchor="w",
-            wraplength=620,
-        ).pack(fill="x", anchor="w", pady=(4, 0))
+            width=self._message_width(),
+        ).pack(fill="x", anchor="w", pady=(6, 0))
 
         self.root.update_idletasks()
         self.chat_canvas.yview_moveto(1.0)
@@ -940,7 +979,7 @@ class LocalPilotPopup:
             self.status.configure(text=f"Thinking with {self.settings.model_provider.title()}...")
         else:
             self.ask_button.configure(state=tk.NORMAL)
-            self.status.configure(text="Ctrl+Enter to ask")
+            self.status.configure(text="Enter to ask, Shift+Enter for a new line")
 
     def _sync_scroll_region(self, event: object | None = None) -> None:
         self.chat_canvas.configure(scrollregion=self.chat_canvas.bbox("all"))
@@ -950,6 +989,30 @@ class LocalPilotPopup:
 
     def _on_mousewheel(self, event: tk.Event) -> None:
         self.chat_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+    def _message_width(self) -> int:
+        canvas_width = max(620, self.chat_canvas.winfo_width())
+        return min(720, max(420, canvas_width - 220))
+
+    def _show_placeholder(self) -> None:
+        self.placeholder_active = True
+        self.question.insert("1.0", self.input_placeholder)
+        self.question.configure(fg=self.colors["muted"])
+
+    def _clear_placeholder(self, event: object | None = None) -> None:
+        if self.placeholder_active:
+            self.question.delete("1.0", tk.END)
+            self.placeholder_active = False
+            self.question.configure(fg=self.colors["text"])
+
+    def _restore_placeholder(self, event: object | None = None) -> None:
+        if not self.question.get("1.0", tk.END).strip():
+            self._show_placeholder()
+
+    def _copy_text(self, text: str) -> None:
+        self.root.clipboard_clear()
+        self.root.clipboard_append(text)
+        self.status.configure(text="Copied response to clipboard.")
 
 
 def main() -> None:

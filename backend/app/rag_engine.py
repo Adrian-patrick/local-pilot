@@ -253,7 +253,7 @@ def _requested_sections(question: str) -> list[str]:
         (r"\btechnical skills\b", "Technical Skills"),
         (r"\bskills?\b", "Skills"),
         (r"\bresearch\b", "Research"),
-        (r"\bexperience\b", "Experience"),
+        (r"\b(experience|experiences|experince|experinence|expirience)\b|\bwork history\b|\binternships?\b", "Experience"),
         (r"\bprojects\b|\blist\b.*\bproject\b|\bproject list\b", "Projects"),
         (r"\beducation\b", "Education"),
         (r"\bcertifications?\b", "Certifications"),
@@ -499,7 +499,7 @@ def _intent_instructions(question: str) -> str:
             "Return only actual project names with one-line descriptions. Exclude standalone "
             "tools, technologies, datasets, companies, paper titles, dates, and links."
         )
-    if "experience" in lowered:
+    if re.search(r"\b(experience|experiences|experince|experinence|expirience)\b|\bwork history\b|\binternships?\b", lowered):
         return (
             "Return only work, internship, and research experience. Include role, organization, "
             "timeframe when present, and concrete work done."
