@@ -19,8 +19,8 @@ from .rag_store import (
 )
 
 
-TOP_K = 6
-MAX_CONTEXT_CHARS = 8_000
+TOP_K = 10
+MAX_CONTEXT_CHARS = 14_000
 
 
 def answer_with_rag(path: str, question: str) -> dict:
@@ -36,12 +36,15 @@ def answer_workspace(paths: list[str], question: str) -> dict:
         chunks = load_workspace_chunks(con, workspace["id"])
         history = load_workspace_history(con, workspace["id"])
         retrieved = retrieve_chunks(question, chunks, top_k=TOP_K)
+        retrieved = _expand_context_for_question(question, chunks, retrieved)
 
     if not retrieved:
         answer = "I don't see readable content in the selected workspace."
         sources = workspace["paths"]
     else:
-        extracted_answer = _deterministic_answer(question, chunks, extracted_text)
+        extracted_answer = _profile_answer(question, chunks, extracted_text)
+        if not extracted_answer:
+            extracted_answer = _deterministic_answer(question, chunks, extracted_text)
         if extracted_answer:
             answer = extracted_answer
         else:
@@ -122,6 +125,9 @@ def _ensure_indexed(context: dict) -> str:
 
 def _deterministic_answer(question: str, chunks: list[dict], extracted_text: str = "") -> str | None:
     lowered = question.lower()
+    if _is_general_document_question(lowered) and not _requested_sections(lowered):
+        return None
+
     text = extracted_text or "\n".join(chunk["text"] for chunk in chunks)
     sections = _requested_sections(lowered)
     if not sections:
@@ -130,13 +136,88 @@ def _deterministic_answer(question: str, chunks: list[dict], extracted_text: str
     blocks = []
     for section_name in sections:
         section = _section_between(text, (section_name,), COMMON_SECTION_HEADINGS)
-        lines = _clean_section_lines(section, skip_headers=(section_name,))
+        if section_name == "Projects":
+            lines = _extract_project_lines(section)
+        else:
+            lines = _clean_section_lines(section, skip_headers=(section_name,))
         if lines:
             blocks.append(f"{section_name}:\n" + "\n".join(f"- {line}" for line in lines[:10]))
 
     if not blocks:
         return None
     return "\n\n".join(blocks)
+
+
+def _profile_answer(question: str, chunks: list[dict], extracted_text: str = "") -> str | None:
+    lowered = question.lower()
+    if not _is_general_document_question(lowered) or _requested_sections(lowered):
+        return None
+
+    text = extracted_text or "\n".join(chunk["text"] for chunk in chunks)
+    profile = _clean_section_lines(
+        _section_between(text, ("Profile", "Summary", "Objective", "Overview"), COMMON_SECTION_HEADINGS),
+        skip_headers=("Profile", "Summary", "Objective", "Overview"),
+    )
+    if not profile:
+        return None
+
+    subject = _document_subject(text)
+    profile_sentence = _join_lines(profile[:6])
+    if not profile_sentence:
+        return None
+
+    answer_parts = [f"{subject} is {profile_sentence[0].lower() + profile_sentence[1:] if subject != 'This document' else profile_sentence}"]
+
+    skills = _compact_section_points(
+        _section_between(text, ("Technical Skills", "Skills"), COMMON_SECTION_HEADINGS),
+        skip_headers=("Technical Skills", "Skills"),
+        limit=4,
+    )
+    if skills:
+        answer_parts.append("Key areas: " + "; ".join(skills) + ".")
+
+    experience = _compact_section_points(
+        _section_between(text, ("Experience",), COMMON_SECTION_HEADINGS),
+        skip_headers=("Experience",),
+        limit=3,
+    )
+    if experience:
+        answer_parts.append("Relevant experience: " + "; ".join(experience) + ".")
+
+    return "\n\n".join(answer_parts)
+
+
+def _document_subject(text: str) -> str:
+    for raw in text.splitlines()[:8]:
+        line = re.sub(r"\s+", " ", raw.strip())
+        if not line:
+            continue
+        if any(marker in line for marker in ("@", "http", "linkedin", "github", "+91")):
+            continue
+        if 2 <= len(line) <= 80:
+            return line
+    return "This document"
+
+
+def _join_lines(lines: list[str]) -> str:
+    text = " ".join(line.rstrip(".") for line in lines if line)
+    text = re.sub(r"\s+", " ", text).strip()
+    text = re.sub(r"[,;]\s*$", "", text)
+    text = text.replace(",.", ".").replace(";.", ".")
+    return text + "." if text and not text.endswith(".") else text
+
+
+def _compact_section_points(section: str, skip_headers: tuple[str, ...], limit: int) -> list[str]:
+    points = []
+    for line in _clean_section_lines(section, skip_headers=skip_headers):
+        if len(line) > 180:
+            continue
+        if re.search(r"^\d{4}|present$|india$|bengaluru", line.lower()):
+            continue
+        points.append(line.rstrip("."))
+        if len(points) >= limit:
+            break
+    return points
 
 
 COMMON_SECTION_HEADINGS = (
@@ -184,6 +265,53 @@ def _requested_sections(question: str) -> list[str]:
     return sections
 
 
+def _expand_context_for_question(question: str, chunks: list[dict], retrieved: list[dict]) -> list[dict]:
+    if not chunks:
+        return []
+
+    expanded: list[dict] = []
+    if _is_general_document_question(question.lower()):
+        expanded.extend(chunks[:3])
+        expanded.extend(_chunks_with_sections(chunks, {"summary", "profile", "objective", "overview"}))
+        expanded.extend(_chunks_with_sections(chunks, {"skills", "experience", "projects"}))
+
+    expanded.extend(retrieved)
+    return _unique_chunks(expanded)[:TOP_K]
+
+
+def _chunks_with_sections(chunks: list[dict], section_names: set[str]) -> list[dict]:
+    matches = []
+    for chunk in chunks:
+        section = str((chunk.get("metadata") or {}).get("section") or "").lower()
+        if any(name in section for name in section_names):
+            matches.append(chunk)
+    return matches
+
+
+def _unique_chunks(chunks: list[dict]) -> list[dict]:
+    unique = []
+    seen: set[tuple[str, int]] = set()
+    for chunk in chunks:
+        key = (chunk["source"], int(chunk["chunk_index"]))
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(chunk)
+    return unique
+
+
+def _is_general_document_question(question: str) -> bool:
+    return bool(
+        re.search(r"\bwho\s+(is|are|was|were)\b", question)
+        or re.search(r"\bwhat\s+(is|are)\b", question)
+        or re.search(r"\bwhat\s+does\b", question)
+        or re.search(r"\btell me about\b", question)
+        or re.search(r"\bdescribe\b", question)
+        or re.search(r"\boverview\b", question)
+        or re.search(r"\bprofile\b", question)
+    )
+
+
 def _section_between(text: str, start_markers: tuple[str, ...], end_markers: tuple[str, ...]) -> str:
     start = _find_heading(text, start_markers)
     if start < 0:
@@ -202,9 +330,11 @@ def _find_heading(text: str, markers: tuple[str, ...]) -> int:
         match = re.search(rf"(?im)^\s*{re.escape(marker)}\s*$", text)
         if match:
             return match.start()
-    lower = text.lower()
-    starts = [lower.find(marker.lower()) for marker in markers]
-    starts = [index for index in starts if index >= 0]
+    starts = []
+    for marker in markers:
+        match = re.search(rf"(?im)^\s*{re.escape(marker)}\b", text)
+        if match:
+            starts.append(match.start())
     return min(starts) if starts else -1
 
 
@@ -346,6 +476,13 @@ def _intent_instructions(question: str) -> str:
         )
     if "summar" in lowered or "profile" in lowered:
         return "Summarize the selected document into concise, useful bullets."
+    if _is_general_document_question(lowered):
+        return (
+            "Answer as a general document-understanding question. Identify the main person, "
+            "topic, object, project, or entity from the selected context, then summarize the "
+            "most relevant facts from across the document. Do not return only one matching "
+            "section unless the question explicitly asks for that section."
+        )
     return "No special formatting beyond answering from the selected context."
 
 

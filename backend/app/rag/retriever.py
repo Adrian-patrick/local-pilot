@@ -103,6 +103,8 @@ def terms(text: str) -> list[str]:
         "which",
         "with",
         "would",
+        "does",
+        "who",
     }
     return [
         token
