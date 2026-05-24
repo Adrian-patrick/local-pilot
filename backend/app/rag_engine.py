@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 
 from .context_collector import collect_context
-from .ollama_client import OllamaError, generate_with_ollama
+from .llm import LLMError, generate_text
 from .rag_store import (
     connect,
     content_hash,
@@ -308,8 +308,8 @@ def _generate_corrected_answer(
 ) -> tuple[str, str]:
     prompt = _build_grounded_prompt(question, chunks, history, workspace)
     try:
-        answer = generate_with_ollama(prompt)
-    except OllamaError as exc:
+        answer = generate_text(prompt)
+    except LLMError as exc:
         return _setup_help(workspace, question, str(exc)), "ERROR"
 
     verdict, reason = _validate_answer(answer, chunks)
@@ -323,8 +323,8 @@ def _generate_corrected_answer(
         + "\nRewrite the answer using only the provided workspace chunks."
     )
     try:
-        return generate_with_ollama(retry_prompt), "RETRIED"
-    except OllamaError:
+        return generate_text(retry_prompt), "RETRIED"
+    except LLMError:
         return answer, "FAILED_VALIDATION"
 
 

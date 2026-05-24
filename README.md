@@ -31,6 +31,7 @@ local-pilot/
       main.py              FastAPI app
       agent.py             Stage 1 answer runtime
       rag_engine.py        Local corrective RAG flow
+      llm/                 Model router for Ollama/OpenAI/Claude/Gemini/Groq
       rag_store.py         SQLite item memory and chunk store
       context_collector.py File/folder context and readable content collection
       extractors.py        Text, PDF, DOCX, and PPTX extraction
@@ -109,6 +110,46 @@ ollama pull qwen3:4b
 ```
 
 If `ollama` is not recognized in PowerShell, open the Ollama app once or restart your terminal after installing Ollama.
+
+## AI Providers
+
+Local Pilot uses Ollama by default so selected file content stays on your computer.
+
+Configure the provider with environment variables:
+
+```bash
+LOCAL_PILOT_MODEL_PROVIDER=ollama
+OLLAMA_MODEL=gemma3:1b
+```
+
+Supported provider values:
+
+```text
+ollama
+openai
+anthropic
+gemini
+groq
+auto
+```
+
+Cloud providers need API keys:
+
+```bash
+OPENAI_API_KEY=...
+ANTHROPIC_API_KEY=...
+GEMINI_API_KEY=...
+GROQ_API_KEY=...
+```
+
+`auto` tries Ollama first. Cloud fallback is disabled unless explicitly enabled:
+
+```bash
+LOCAL_PILOT_MODEL_PROVIDER=auto
+LOCAL_PILOT_ALLOW_CLOUD_FALLBACK=true
+```
+
+Privacy rule: cloud providers receive the selected chunks needed to answer the question.
 
 ## Local RAG Memory
 

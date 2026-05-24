@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from .agent import answer_question
+from .config import get_settings
 from .context_collector import collect_context
 from .schemas import AskRequest, AskResponse, ContextResponse
 
@@ -23,7 +24,13 @@ def root() -> dict:
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok", "app": "Local Pilot"}
+    settings = get_settings()
+    return {
+        "status": "ok",
+        "app": "Local Pilot",
+        "model_provider": settings.model_provider,
+        "ollama_model": settings.ollama_model,
+    }
 
 
 @app.get("/context", response_model=ContextResponse)
