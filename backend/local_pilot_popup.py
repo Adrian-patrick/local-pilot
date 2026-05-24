@@ -474,8 +474,34 @@ class LocalPilotPopup:
             ("Groq model", "GROQ_MODEL", self.settings.groq_model, False),
         ]
 
-        self._settings_entries(left, local_rows, values, entries, secret_keys, model_entries)
-        self._settings_entries(right, cloud_rows, values, entries, secret_keys, model_entries)
+        def fetch_models_for(provider: str) -> None:
+            model_key = self._model_key_for_provider(provider)
+            if not model_key or model_key not in model_entries:
+                status.configure(text=f"No model field for {provider}.")
+                return
+
+            overrides = {key: entry.get() for key, entry in entries.items() if entry.get()}
+            status.configure(text=f"Fetching {provider} models...")
+            dialog.update_idletasks()
+
+            try:
+                models = list_models(provider, overrides=overrides)
+            except LLMError as exc:
+                status.configure(text=f"Could not fetch {provider} models: {exc}")
+                return
+
+            if not models:
+                status.configure(text=f"No models found for {provider}.")
+                return
+
+            model_box = model_entries[model_key]
+            model_box.configure(values=models)
+            if model_box.get() not in models:
+                model_box.set(models[0])
+            status.configure(text=f"Loaded {len(models)} models for {provider}.")
+
+        self._settings_entries(left, local_rows, values, entries, secret_keys, model_entries, fetch_models_for)
+        self._settings_entries(right, cloud_rows, values, entries, secret_keys, model_entries, fetch_models_for)
 
         key_status = self._key_status_text()
         tk.Label(
@@ -506,33 +532,6 @@ class LocalPilotPopup:
         buttons = tk.Frame(button_bar, bg=self.colors["bg"])
         buttons.grid(row=0, column=1, sticky="e")
 
-        def fetch_models() -> None:
-            provider = self._provider_for_model_fetch(provider_var.get(), entries)
-            model_key = self._model_key_for_provider(provider)
-            if not model_key or model_key not in model_entries:
-                status.configure(text="Choose a provider with a model field first.")
-                return
-
-            overrides = {key: entry.get() for key, entry in entries.items() if entry.get()}
-            status.configure(text=f"Fetching {provider} models...")
-            dialog.update_idletasks()
-
-            try:
-                models = list_models(provider, overrides=overrides)
-            except LLMError as exc:
-                status.configure(text=f"Could not fetch models: {exc}")
-                return
-
-            if not models:
-                status.configure(text=f"No models found for {provider}.")
-                return
-
-            model_box = model_entries[model_key]
-            model_box.configure(values=models)
-            if model_box.get() not in models:
-                model_box.set(models[0])
-            status.configure(text=f"Loaded {len(models)} models for {provider}.")
-
         def save() -> None:
             updates = {
                 "LOCAL_PILOT_MODEL_PROVIDER": provider_var.get(),
@@ -547,14 +546,14 @@ class LocalPilotPopup:
             self._refresh_settings_view()
             status.configure(text="Saved. New questions will use these settings.")
 
-        ttk.Button(buttons, text="Fetch models", command=fetch_models).grid(row=0, column=0, padx=(0, 8))
-        ttk.Button(buttons, text="Save", style="Accent.TButton", command=save).grid(row=0, column=1, padx=(0, 8))
-        ttk.Button(buttons, text="Close", command=dialog.destroy).grid(row=0, column=2)
+        ttk.Button(buttons, text="Save", style="Accent.TButton", command=save).grid(row=0, column=0, padx=(0, 8))
+        ttk.Button(buttons, text="Close", command=dialog.destroy).grid(row=0, column=1)
 
     def _settings_section(self, parent: tk.Frame, title: str, row: int, column: int) -> tk.Frame:
         section = tk.Frame(parent, bg=self.colors["panel"])
         section.grid(row=row, column=column, sticky="nsew", padx=(0, 16) if column == 0 else (16, 0))
         section.columnconfigure(1, weight=1)
+        section.columnconfigure(2, weight=0)
         tk.Label(
             section,
             text=title,
@@ -573,6 +572,7 @@ class LocalPilotPopup:
         entries: dict[str, tk.Entry],
         secret_keys: set[str],
         model_entries: dict[str, ttk.Combobox],
+        fetch_models_for,
     ) -> None:
         for row_index, (label, key, default, secret) in enumerate(rows, start=1):
             self._settings_label(parent, label, row_index)
@@ -595,6 +595,13 @@ class LocalPilotPopup:
                 entry.insert(0, values.get(key, default or ""))
             entry.grid(row=row_index, column=1, sticky="ew", pady=(0, 9), ipady=4)
             entries[key] = entry
+            provider = self._provider_for_model_key(key)
+            if provider:
+                ttk.Button(
+                    parent,
+                    text="Fetch",
+                    command=lambda value=provider: fetch_models_for(value),
+                ).grid(row=row_index, column=2, sticky="e", padx=(8, 0), pady=(0, 9))
 
     def _model_key_for_provider(self, provider: str) -> str | None:
         return {
@@ -606,20 +613,14 @@ class LocalPilotPopup:
             "groq": "GROQ_MODEL",
         }.get(provider)
 
-    def _provider_for_model_fetch(self, selected_provider: str, entries: dict[str, tk.Entry]) -> str:
-        typed_key_providers = [
-            provider
-            for key, provider in (
-                ("OPENAI_API_KEY", "openai"),
-                ("ANTHROPIC_API_KEY", "anthropic"),
-                ("GEMINI_API_KEY", "gemini"),
-                ("GROQ_API_KEY", "groq"),
-            )
-            if entries.get(key) and entries[key].get().strip()
-        ]
-        if len(typed_key_providers) == 1:
-            return typed_key_providers[0]
-        return selected_provider
+    def _provider_for_model_key(self, model_key: str) -> str | None:
+        return {
+            "OLLAMA_MODEL": "ollama",
+            "OPENAI_MODEL": "openai",
+            "ANTHROPIC_MODEL": "anthropic",
+            "GEMINI_MODEL": "gemini",
+            "GROQ_MODEL": "groq",
+        }.get(model_key)
 
     def _key_status_text(self) -> str:
         statuses = [
