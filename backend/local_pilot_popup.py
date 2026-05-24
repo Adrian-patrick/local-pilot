@@ -346,14 +346,45 @@ class LocalPilotPopup:
         dialog.grab_set()
 
         dialog.columnconfigure(0, weight=1)
-        dialog.rowconfigure(0, weight=1)
-        body = tk.Frame(dialog, bg=self.colors["bg"], padx=22, pady=20)
-        body.grid(row=0, column=0, sticky="nsew")
+        dialog.rowconfigure(1, weight=1)
+
+        header = tk.Frame(dialog, bg=self.colors["bg"], padx=22, pady=20)
+        header.grid(row=0, column=0, sticky="ew")
+        header.columnconfigure(0, weight=1)
+
+        body_shell = tk.Frame(dialog, bg=self.colors["bg"], padx=22)
+        body_shell.grid(row=1, column=0, sticky="nsew")
+        body_shell.columnconfigure(0, weight=1)
+        body_shell.rowconfigure(0, weight=1)
+
+        settings_canvas = tk.Canvas(body_shell, bg=self.colors["bg"], highlightthickness=0)
+        settings_canvas.grid(row=0, column=0, sticky="nsew")
+
+        scrollbar = ttk.Scrollbar(body_shell, orient="vertical", command=settings_canvas.yview)
+        scrollbar.grid(row=0, column=1, sticky="ns")
+        settings_canvas.configure(yscrollcommand=scrollbar.set)
+
+        body = tk.Frame(settings_canvas, bg=self.colors["bg"])
+        body_window = settings_canvas.create_window((0, 0), window=body, anchor="nw")
         body.columnconfigure(0, weight=1)
         body.rowconfigure(2, weight=1)
 
+        def sync_scroll_region(event: object | None = None) -> None:
+            settings_canvas.configure(scrollregion=settings_canvas.bbox("all"))
+
+        def sync_body_width(event: tk.Event) -> None:
+            settings_canvas.itemconfigure(body_window, width=event.width)
+
+        def on_settings_mousewheel(event: tk.Event) -> None:
+            settings_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+        body.bind("<Configure>", sync_scroll_region)
+        settings_canvas.bind("<Configure>", sync_body_width)
+        settings_canvas.bind("<MouseWheel>", on_settings_mousewheel)
+        body.bind("<MouseWheel>", on_settings_mousewheel)
+
         tk.Label(
-            body,
+            header,
             text="AI Provider Settings",
             font=("Segoe UI", 16, "bold"),
             fg=self.colors["text"],
@@ -362,7 +393,7 @@ class LocalPilotPopup:
         ).grid(row=0, column=0, sticky="ew")
 
         tk.Label(
-            body,
+            header,
             text="Local mode is private. Cloud mode can send selected file chunks to the API provider. Leave key fields blank to keep saved keys.",
             font=("Segoe UI", 9),
             fg=self.colors["muted"],
@@ -455,8 +486,8 @@ class LocalPilotPopup:
             wraplength=310,
         ).grid(row=len(cloud_rows), column=0, columnspan=2, sticky="ew", pady=(2, 0))
 
-        button_bar = tk.Frame(body, bg=self.colors["bg"])
-        button_bar.grid(row=3, column=0, sticky="ew", pady=(12, 0))
+        button_bar = tk.Frame(dialog, bg=self.colors["bg"], padx=22, pady=14)
+        button_bar.grid(row=2, column=0, sticky="ew")
         button_bar.columnconfigure(0, weight=1)
 
         status = tk.Label(
