@@ -13,6 +13,7 @@ from app.config import get_settings
 from app.context_collector import collect_context
 from app.llm.base import LLMError
 from app.llm.model_discovery import list_models, test_provider
+from app.rag_store import connect, path_id
 from app.setup_check import get_setup_status
 from app.settings_store import read_env_values, save_env_values
 
@@ -25,11 +26,12 @@ class LocalPilotPopup:
         self.settings = get_settings()
         self.input_placeholder = "Ask anything about this file or folder..."
         self.placeholder_active = False
+        self.selected_name = Path(selected_path).name or selected_path
 
         self.root = tk.Tk()
         self.root.title("Local Pilot")
-        self.root.geometry("940x720")
-        self.root.minsize(760, 560)
+        self.root.geometry("1120x760")
+        self.root.minsize(900, 620)
         self.root.configure(bg="#f5f7fb")
 
         self.colors = {
@@ -46,6 +48,11 @@ class LocalPilotPopup:
             "canvas": "#f8fafc",
             "assistant_border": "#e2e8f0",
             "user_border": "#bfdbfe",
+            "sidebar": "#111827",
+            "sidebar_panel": "#1f2937",
+            "sidebar_text": "#f8fafc",
+            "sidebar_muted": "#9ca3af",
+            "sidebar_active": "#263449",
         }
 
         self._configure_style()
@@ -85,43 +92,152 @@ class LocalPilotPopup:
 
     def _build_ui(self) -> None:
         self.root.columnconfigure(0, weight=1)
-        self.root.rowconfigure(1, weight=1)
+        self.root.rowconfigure(0, weight=1)
 
-        shell = tk.Frame(self.root, bg=self.colors["bg"], padx=22, pady=20)
-        shell.grid(row=0, column=0, rowspan=4, sticky="nsew")
-        shell.columnconfigure(0, weight=1)
-        shell.rowconfigure(3, weight=1)
+        app = tk.Frame(self.root, bg=self.colors["bg"])
+        app.grid(row=0, column=0, sticky="nsew")
+        app.columnconfigure(1, weight=1)
+        app.rowconfigure(0, weight=1)
 
-        header = tk.Frame(shell, bg=self.colors["bg"])
+        sidebar = tk.Frame(app, bg=self.colors["sidebar"], width=270, padx=14, pady=14)
+        sidebar.grid(row=0, column=0, sticky="nsew")
+        sidebar.grid_propagate(False)
+        sidebar.columnconfigure(0, weight=1)
+        sidebar.rowconfigure(4, weight=1)
+
+        brand = tk.Frame(sidebar, bg=self.colors["sidebar"])
+        brand.grid(row=0, column=0, sticky="ew", pady=(0, 16))
+        mark = tk.Canvas(brand, width=36, height=36, bg=self.colors["sidebar"], highlightthickness=0)
+        mark.pack(side=tk.LEFT, padx=(0, 10))
+        mark.create_oval(3, 3, 33, 33, fill=self.colors["brand"], outline="")
+        mark.create_text(18, 18, text="LP", fill="#ffffff", font=("Segoe UI", 9, "bold"))
+        tk.Label(
+            brand,
+            text="Local Pilot",
+            font=("Segoe UI", 15, "bold"),
+            fg=self.colors["sidebar_text"],
+            bg=self.colors["sidebar"],
+            anchor="w",
+        ).pack(side=tk.LEFT, fill="x", expand=True)
+
+        self._sidebar_button(sidebar, "+  New chat", self._start_new_chat).grid(row=1, column=0, sticky="ew", pady=(0, 8))
+        self._sidebar_button(sidebar, "Setup", self._open_setup).grid(row=2, column=0, sticky="ew", pady=(0, 8))
+
+        current = tk.Frame(
+            sidebar,
+            bg=self.colors["sidebar_panel"],
+            padx=10,
+            pady=10,
+            highlightbackground="#374151",
+            highlightthickness=1,
+        )
+        current.grid(row=3, column=0, sticky="ew", pady=(8, 14))
+        current.columnconfigure(0, weight=1)
+        tk.Label(
+            current,
+            text="Selected file",
+            font=("Segoe UI", 8, "bold"),
+            fg=self.colors["sidebar_muted"],
+            bg=self.colors["sidebar_panel"],
+            anchor="w",
+        ).grid(row=0, column=0, sticky="ew")
+        tk.Label(
+            current,
+            text=self.selected_name,
+            font=("Segoe UI", 9, "bold"),
+            fg=self.colors["sidebar_text"],
+            bg=self.colors["sidebar_panel"],
+            anchor="w",
+            wraplength=220,
+            justify="left",
+        ).grid(row=1, column=0, sticky="ew", pady=(4, 0))
+        self.sidebar_summary = tk.Label(
+            current,
+            text="Loading...",
+            font=("Segoe UI", 8),
+            fg=self.colors["sidebar_muted"],
+            bg=self.colors["sidebar_panel"],
+            anchor="w",
+            wraplength=220,
+            justify="left",
+        )
+        self.sidebar_summary.grid(row=2, column=0, sticky="ew", pady=(4, 0))
+
+        history_header = tk.Frame(sidebar, bg=self.colors["sidebar"])
+        history_header.grid(row=4, column=0, sticky="new")
+        history_header.columnconfigure(0, weight=1)
+        tk.Label(
+            history_header,
+            text="Chats",
+            font=("Segoe UI", 9, "bold"),
+            fg=self.colors["sidebar_muted"],
+            bg=self.colors["sidebar"],
+            anchor="w",
+        ).grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        self.history_search_var = tk.StringVar()
+        search = tk.Entry(
+            history_header,
+            textvariable=self.history_search_var,
+            font=("Segoe UI", 9),
+            fg=self.colors["sidebar_text"],
+            bg=self.colors["sidebar_panel"],
+            insertbackground=self.colors["sidebar_text"],
+            relief=tk.FLAT,
+        )
+        search.grid(row=1, column=0, sticky="ew", pady=(0, 10), ipady=6)
+        search.insert(0, "Search chats")
+        search.configure(fg=self.colors["sidebar_muted"])
+
+        def clear_search(event: object | None = None) -> None:
+            if search.get() == "Search chats":
+                search.delete(0, tk.END)
+                search.configure(fg=self.colors["sidebar_text"])
+
+        def restore_search(event: object | None = None) -> None:
+            if not search.get():
+                search.insert(0, "Search chats")
+                search.configure(fg=self.colors["sidebar_muted"])
+
+        search.bind("<FocusIn>", clear_search)
+        search.bind("<FocusOut>", restore_search)
+        self.history_search_var.trace_add("write", lambda *_: self._refresh_history_sidebar())
+        self.chat_history_frame = tk.Frame(history_header, bg=self.colors["sidebar"])
+        self.chat_history_frame.grid(row=2, column=0, sticky="new")
+        self._refresh_history_sidebar()
+
+        bottom = tk.Frame(sidebar, bg=self.colors["sidebar"])
+        bottom.grid(row=5, column=0, sticky="sew", pady=(12, 0))
+        bottom.columnconfigure(0, weight=1)
+        self._sidebar_button(bottom, "Settings", self._open_settings).grid(row=0, column=0, sticky="ew")
+
+        main = tk.Frame(app, bg=self.colors["bg"], padx=22, pady=18)
+        main.grid(row=0, column=1, sticky="nsew")
+        main.columnconfigure(0, weight=1)
+        main.rowconfigure(3, weight=1)
+
+        header = tk.Frame(main, bg=self.colors["bg"])
         header.grid(row=0, column=0, sticky="ew", pady=(0, 14))
-        header.columnconfigure(1, weight=1)
-        header.columnconfigure(2, weight=0)
-
-        mark = tk.Canvas(header, width=42, height=42, bg=self.colors["bg"], highlightthickness=0)
-        mark.grid(row=0, column=0, rowspan=2, sticky="nw", padx=(0, 12))
-        mark.create_oval(3, 3, 39, 39, fill=self.colors["brand"], outline="")
-        mark.create_text(21, 21, text="LP", fill="#ffffff", font=("Segoe UI", 10, "bold"))
+        header.columnconfigure(0, weight=1)
 
         tk.Label(
             header,
-            text="Local Pilot",
-            font=("Segoe UI", 20, "bold"),
+            text=self.selected_name,
+            font=("Segoe UI", 15, "bold"),
             fg=self.colors["text"],
             bg=self.colors["bg"],
             anchor="w",
-        ).grid(row=0, column=1, sticky="ew")
-
+        ).grid(row=0, column=0, sticky="ew")
         tk.Label(
             header,
-            text="Ask questions about the file or folder you selected.",
-            font=("Segoe UI", 10),
+            text="Ask questions, inspect history, and work directly from Explorer context.",
+            font=("Segoe UI", 9),
             fg=self.colors["muted"],
             bg=self.colors["bg"],
             anchor="w",
-        ).grid(row=1, column=1, sticky="ew", pady=(2, 0))
+        ).grid(row=1, column=0, sticky="ew", pady=(3, 0))
 
         provider_area = tk.Frame(header, bg=self.colors["bg"])
-        provider_area.grid(row=0, column=2, rowspan=2, sticky="ne")
+        provider_area.grid(row=0, column=1, rowspan=2, sticky="ne")
 
         self.provider_badge = tk.Label(
             provider_area,
@@ -132,24 +248,10 @@ class LocalPilotPopup:
             padx=10,
             pady=6,
         )
-        self.provider_badge.grid(row=0, column=0, sticky="e", padx=(0, 8))
-
-        ttk.Button(
-            provider_area,
-            text="Settings",
-            style="Ghost.TButton",
-            command=self._open_settings,
-        ).grid(row=0, column=1, sticky="e")
-
-        ttk.Button(
-            provider_area,
-            text="Setup",
-            style="Ghost.TButton",
-            command=self._open_setup,
-        ).grid(row=0, column=2, sticky="e", padx=(8, 0))
+        self.provider_badge.grid(row=0, column=0, sticky="e")
 
         context_card = tk.Frame(
-            shell,
+            main,
             bg=self.colors["panel"],
             highlightbackground=self.colors["border"],
             highlightthickness=1,
@@ -158,16 +260,6 @@ class LocalPilotPopup:
         )
         context_card.grid(row=1, column=0, sticky="new", pady=(0, 12))
         context_card.columnconfigure(0, weight=1)
-
-        self.context_title = tk.Label(
-            context_card,
-            text="Selected item",
-            font=("Segoe UI", 9, "bold"),
-            fg=self.colors["brand"],
-            bg=self.colors["panel"],
-            anchor="w",
-        )
-        self.context_title.grid(row=0, column=0, sticky="ew")
 
         self.path_label = tk.Label(
             context_card,
@@ -179,7 +271,7 @@ class LocalPilotPopup:
             wraplength=760,
             justify="left",
         )
-        self.path_label.grid(row=1, column=0, sticky="ew", pady=(4, 0))
+        self.path_label.grid(row=0, column=0, sticky="ew")
 
         self.summary_label = tk.Label(
             context_card,
@@ -191,9 +283,9 @@ class LocalPilotPopup:
             wraplength=760,
             justify="left",
         )
-        self.summary_label.grid(row=2, column=0, sticky="ew", pady=(4, 0))
+        self.summary_label.grid(row=1, column=0, sticky="ew", pady=(4, 0))
 
-        actions = tk.Frame(shell, bg=self.colors["bg"])
+        actions = tk.Frame(main, bg=self.colors["bg"])
         actions.grid(row=2, column=0, sticky="ew", pady=(0, 12))
         actions.columnconfigure(5, weight=1)
 
@@ -235,7 +327,7 @@ class LocalPilotPopup:
             ).grid(row=0, column=index, sticky="w", padx=(0, 8))
 
         chat_panel = tk.Frame(
-            shell,
+            main,
             bg=self.colors["panel"],
             highlightbackground=self.colors["border"],
             highlightthickness=1,
@@ -260,7 +352,7 @@ class LocalPilotPopup:
         self.chat_canvas.bind_all("<MouseWheel>", self._on_mousewheel)
 
         input_card = tk.Frame(
-            shell,
+            main,
             bg=self.colors["input"],
             highlightbackground=self.colors["border"],
             highlightthickness=1,
@@ -297,7 +389,7 @@ class LocalPilotPopup:
         )
         self.ask_button.grid(row=0, column=1, sticky="ns")
 
-        footer = tk.Frame(shell, bg=self.colors["bg"])
+        footer = tk.Frame(main, bg=self.colors["bg"])
         footer.grid(row=5, column=0, sticky="ew", pady=(8, 0))
         footer.columnconfigure(0, weight=1)
 
@@ -321,17 +413,183 @@ class LocalPilotPopup:
         )
         self.privacy_label.grid(row=0, column=1, sticky="e")
 
+    def _sidebar_button(self, parent: tk.Frame, text: str, command) -> tk.Button:
+        return tk.Button(
+            parent,
+            text=text,
+            font=("Segoe UI", 10),
+            fg=self.colors["sidebar_text"],
+            bg=self.colors["sidebar_panel"],
+            activebackground=self.colors["sidebar_active"],
+            activeforeground=self.colors["sidebar_text"],
+            relief=tk.FLAT,
+            padx=12,
+            pady=9,
+            anchor="w",
+            command=command,
+        )
+
+    def _refresh_history_sidebar(self) -> None:
+        if not hasattr(self, "chat_history_frame"):
+            return
+        for child in self.chat_history_frame.winfo_children():
+            child.destroy()
+
+        rows = self._recent_chat_rows()
+        query = ""
+        if hasattr(self, "history_search_var"):
+            query = self.history_search_var.get().strip().lower()
+            if query == "search chats":
+                query = ""
+        if query:
+            rows = [
+                row
+                for row in rows
+                if query in row["title"].lower() or query in row["preview"].lower()
+            ]
+        if not rows:
+            tk.Label(
+                self.chat_history_frame,
+                text="No saved chats yet",
+                font=("Segoe UI", 9),
+                fg=self.colors["sidebar_muted"],
+                bg=self.colors["sidebar"],
+                anchor="w",
+            ).pack(fill="x", pady=(2, 0))
+            return
+
+        for row in rows[:12]:
+            title = row["title"]
+            preview = row["preview"] or "No messages yet"
+            button = tk.Button(
+                self.chat_history_frame,
+                text=f"{title}\n{preview}",
+                font=("Segoe UI", 9),
+                fg=self.colors["sidebar_text"],
+                bg=self.colors["sidebar_active"] if row["is_current"] else self.colors["sidebar"],
+                activebackground=self.colors["sidebar_active"],
+                activeforeground=self.colors["sidebar_text"],
+                relief=tk.FLAT,
+                padx=10,
+                pady=8,
+                anchor="w",
+                justify="left",
+                wraplength=220,
+                command=lambda workspace_id=row["workspace_id"]: self._show_saved_chat(workspace_id),
+            )
+            button.pack(fill="x", pady=(0, 4))
+
+    def _recent_chat_rows(self) -> list[dict]:
+        current_item_id = path_id(self.selected_path)
+        with connect() as con:
+            rows = con.execute(
+                """
+                SELECT
+                    workspaces.id AS workspace_id,
+                    workspaces.title AS title,
+                    MAX(messages.id) AS last_message_id,
+                    (
+                        SELECT content
+                        FROM messages m2
+                        WHERE m2.workspace_id = workspaces.id
+                        ORDER BY m2.id DESC
+                        LIMIT 1
+                    ) AS preview,
+                    SUM(CASE WHEN workspace_items.item_id = ? THEN 1 ELSE 0 END) AS current_count
+                FROM workspaces
+                LEFT JOIN workspace_items ON workspace_items.workspace_id = workspaces.id
+                LEFT JOIN messages ON messages.workspace_id = workspaces.id
+                GROUP BY workspaces.id, workspaces.title
+                ORDER BY COALESCE(last_message_id, 0) DESC, workspaces.updated_at DESC
+                LIMIT 20
+                """,
+                (current_item_id,),
+            ).fetchall()
+
+        return [
+            {
+                "workspace_id": row["workspace_id"],
+                "title": self._short_title(row["title"]),
+                "preview": self._short_title(row["preview"] or "", limit=44),
+                "is_current": bool(row["current_count"]),
+            }
+            for row in rows
+        ]
+
+    def _show_saved_chat(self, workspace_id: str) -> None:
+        self._clear_messages()
+        with connect() as con:
+            rows = con.execute(
+                """
+                SELECT role, content
+                FROM messages
+                WHERE workspace_id=?
+                ORDER BY id ASC
+                LIMIT 40
+                """,
+                (workspace_id,),
+            ).fetchall()
+
+        if not rows:
+            self._append("Local Pilot", "No messages are saved for this chat yet.")
+            return
+        for row in rows:
+            self._append("You" if row["role"] == "user" else "Local Pilot", row["content"])
+
+    def _load_current_history(self) -> bool:
+        item_id = path_id(self.selected_path)
+        with connect() as con:
+            rows = con.execute(
+                """
+                SELECT role, content
+                FROM messages
+                WHERE item_id=?
+                ORDER BY id ASC
+                LIMIT 40
+                """,
+                (item_id,),
+            ).fetchall()
+
+        if not rows:
+            return False
+        self._clear_messages()
+        for row in rows:
+            self._append("You" if row["role"] == "user" else "Local Pilot", row["content"])
+        return True
+
+    def _start_new_chat(self) -> None:
+        self._clear_messages()
+        self._append("Local Pilot", f"New chat for {self.selected_name}.\n\nAsk me anything about it.")
+        self.question.focus_set()
+
+    def _clear_messages(self) -> None:
+        for child in self.messages_frame.winfo_children():
+            child.destroy()
+        self.chat_canvas.configure(scrollregion=(0, 0, 0, 0))
+
+    def _short_title(self, value: str, limit: int = 32) -> str:
+        text = " ".join(str(value).split())
+        if not text:
+            return "Untitled chat"
+        if len(text) <= limit:
+            return text
+        return text[: limit - 3].rstrip() + "..."
+
     def _load_context_preview(self) -> None:
         try:
             context = collect_context(self.selected_path)
             self.summary_label.configure(text=context["summary"])
-            self._append(
-                "Local Pilot",
-                f"Loaded {context['kind']}: {context['name']}\n\n"
-                "Ask me anything about it.",
-            )
+            self.sidebar_summary.configure(text=context["summary"])
+            if not self._load_current_history():
+                self._append(
+                    "Local Pilot",
+                    f"Loaded {context['kind']}: {context['name']}\n\n"
+                    "Ask me anything about it.",
+                )
+            self._refresh_history_sidebar()
         except Exception as exc:
             self.summary_label.configure(text="Could not load selected item.")
+            self.sidebar_summary.configure(text="Could not load selected item.")
             self._append("Local Pilot", f"Could not load selected item:\n{exc}")
 
     def _provider_badge_text(self) -> str:
@@ -980,6 +1238,7 @@ class LocalPilotPopup:
         else:
             self.ask_button.configure(state=tk.NORMAL)
             self.status.configure(text="Enter to ask, Shift+Enter for a new line")
+            self._refresh_history_sidebar()
 
     def _sync_scroll_region(self, event: object | None = None) -> None:
         self.chat_canvas.configure(scrollregion=self.chat_canvas.bbox("all"))
