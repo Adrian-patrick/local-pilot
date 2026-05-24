@@ -11,6 +11,13 @@ ANTHROPIC_MODELS = [
     "claude-3-7-sonnet-latest",
 ]
 
+GROQ_FALLBACK_MODELS = [
+    "llama-3.1-8b-instant",
+    "llama-3.3-70b-versatile",
+    "gemma2-9b-it",
+    "mixtral-8x7b-32768",
+]
+
 
 def list_models(provider: str, overrides: dict[str, str] | None = None) -> list[str]:
     settings = get_settings()
@@ -53,7 +60,7 @@ def _openai_models(api_key: str | None) -> list[str]:
 
 def _groq_models(api_key: str | None) -> list[str]:
     if not api_key:
-        raise LLMError("Groq API key is required to fetch models.")
+        return GROQ_FALLBACK_MODELS
     data = get_json(
         "https://api.groq.com/openai/v1/models",
         headers={"Authorization": f"Bearer {api_key}"},

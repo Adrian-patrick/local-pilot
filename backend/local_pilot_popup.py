@@ -487,6 +487,17 @@ class LocalPilotPopup:
             try:
                 models = list_models(provider, overrides=overrides)
             except LLMError as exc:
+                fallback = self._fallback_models_for_provider(provider)
+                if fallback:
+                    model_box = model_entries[model_key]
+                    model_box.configure(values=fallback)
+                    if model_box.get() not in fallback:
+                        model_box.set(fallback[0])
+                    status.configure(
+                        text=self._friendly_model_error(provider, str(exc))
+                        + " Showing common models instead."
+                    )
+                    return
                 status.configure(text=self._friendly_model_error(provider, str(exc)))
                 return
 
@@ -637,11 +648,21 @@ class LocalPilotPopup:
         if "HTTP 403" in error:
             return (
                 f"Could not fetch {provider} models: provider rejected access. "
-                "Check that the API key is correct and that the account has model-list access."
+                "Check the API key. For Groq, the key should usually start with gsk_."
             )
         if "API key is required" in error:
             return f"Add a {provider} API key first, then click Fetch."
         return f"Could not fetch {provider} models: {error}"
+
+    def _fallback_models_for_provider(self, provider: str) -> list[str]:
+        if provider == "groq":
+            return [
+                "llama-3.1-8b-instant",
+                "llama-3.3-70b-versatile",
+                "gemma2-9b-it",
+                "mixtral-8x7b-32768",
+            ]
+        return []
 
     def _settings_label(self, parent: tk.Frame, text: str, row: int) -> None:
         tk.Label(
