@@ -63,7 +63,12 @@ def _openai_models(api_key: str | None) -> list[str]:
         timeout=20,
     )
     models = [item.get("id", "") for item in data.get("data", [])]
-    return sorted(model for model in models if model)
+    # Keep only chat-capable models
+    chat_prefixes = ("gpt-", "o1", "o3", "o4", "chatgpt")
+    return sorted(
+        m for m in models
+        if m and m.startswith(chat_prefixes)
+    )
 
 
 def _groq_models(api_key: str | None) -> list[str]:
@@ -76,7 +81,12 @@ def _groq_models(api_key: str | None) -> list[str]:
         timeout=20,
     )
     models = [item.get("id", "") for item in data.get("data", [])]
-    return sorted(model for model in models if model)
+    # Filter out non-chat models (audio, safety, TTS)
+    skip = {"whisper", "guard", "orpheus"}
+    return sorted(
+        m for m in models
+        if m and not any(s in m.lower() for s in skip)
+    )
 
 
 def _gemini_models(api_key: str | None) -> list[str]:
