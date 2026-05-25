@@ -50,6 +50,8 @@ def answer_workspace(paths: list[str], question: str) -> dict:
     elif not memory_question:
         extracted_answer = _profile_answer(question, chunks, extracted_text)
         if not extracted_answer:
+            extracted_answer = _named_person_answer(question, extracted_text)
+        if not extracted_answer:
             extracted_answer = _deterministic_answer(question, chunks, extracted_text)
         if extracted_answer:
             answer = extracted_answer
@@ -160,6 +162,9 @@ def _profile_answer(question: str, chunks: list[dict], extracted_text: str = "")
         return None
 
     text = extracted_text or "\n".join(chunk["text"] for chunk in chunks)
+    if not _looks_like_profile_document(text):
+        return None
+
     profile = _clean_section_lines(
         _section_between(text, ("Profile", "Summary", "Objective", "Overview"), COMMON_SECTION_HEADINGS),
         skip_headers=("Profile", "Summary", "Objective", "Overview"),
@@ -191,6 +196,125 @@ def _profile_answer(question: str, chunks: list[dict], extracted_text: str = "")
         answer_parts.append("Relevant experience: " + "; ".join(experience) + ".")
 
     return "\n\n".join(answer_parts)
+
+
+def _looks_like_profile_document(text: str) -> bool:
+    lowered = text.lower()
+    profile_signals = sum(
+        1
+        for signal in (
+            "technical skills",
+            "skills",
+            "experience",
+            "projects",
+            "intern",
+            "github",
+            "linkedin",
+            "resume",
+        )
+        if signal in lowered
+    )
+    report_signals = sum(
+        1
+        for signal in (
+            "certificate",
+            "declaration",
+            "submitted in partial",
+            "chapter",
+            "activity point programme",
+            "visvesvaraya technological university",
+        )
+        if signal in lowered
+    )
+    return profile_signals >= 3 and report_signals < 3
+
+
+def _named_person_answer(question: str, text: str) -> str | None:
+    match = re.search(r"\bwho\s+(?:is|are|was|were)\s+([a-zA-Z][a-zA-Z ._-]{1,60})\??", question.strip(), re.I)
+    if not match or not text:
+        return None
+
+    name = re.sub(r"\s+", " ", match.group(1)).strip(" ?.")
+    name_terms = [term.lower() for term in re.findall(r"[a-zA-Z]{2,}", name)]
+    if not name_terms:
+        return None
+
+    lines = [re.sub(r"\s+", " ", line.strip()) for line in text.splitlines()]
+    lines = [line for line in lines if line]
+    match_indexes = [
+        index
+        for index, line in enumerate(lines)
+        if all(term in line.lower() for term in name_terms)
+    ]
+    if not match_indexes:
+        return None
+
+    evidence: list[str] = []
+    for index in match_indexes[:4]:
+        start = max(0, index - 4)
+        end = min(len(lines), index + 9)
+        for line in lines[start:end]:
+            cleaned = _clean_evidence_line(line)
+            if cleaned and cleaned not in evidence:
+                evidence.append(cleaned)
+
+    if not evidence:
+        return None
+
+    compact = " ".join(evidence[:18])
+    compact = re.sub(r"\s+", " ", compact).strip()
+
+    usn_match = re.search(r"\bUSN[:\s]+([A-Z0-9]+)", compact, re.I)
+    degree_match = re.search(
+        r"(Bachelor of Engineering in Computer Science\s*&?\s*Engineering\s*\(?Artificial Intelligence\)?)",
+        compact,
+        re.I,
+    )
+    college_match = re.search(
+        r"(Dayananda Sagar Academy of Technology\s*&?\s*Management|DSATM)",
+        compact,
+        re.I,
+    )
+    programme_match = re.search(r"(AICTE Activity Point Programme)", compact, re.I)
+
+    subject = _title_name(name)
+    facts = []
+    if degree_match:
+        facts.append(f"is a student of {degree_match.group(1)}")
+    elif "student" in compact.lower():
+        facts.append("is described as a student")
+
+    if college_match:
+        facts.append(f"at {college_match.group(1)}")
+    if usn_match:
+        facts.append(f"with USN {usn_match.group(1)}")
+    if programme_match:
+        facts.append(f"connected to the {programme_match.group(1)}")
+
+    if facts:
+        answer = f"According to the selected document, {subject} " + ", ".join(facts) + "."
+    else:
+        answer = f"According to the selected document, {subject} is mentioned in this context: " + compact[:500]
+
+    return answer + "\n\nEvidence found:\n" + "\n".join(f"- {line}" for line in evidence[:8])
+
+
+def _clean_evidence_line(line: str) -> str:
+    cleaned = line.strip(" -*•\t")
+    cleaned = re.sub(r"[.…_]{4,}", " ", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    if not cleaned:
+        return ""
+    if len(cleaned) > 180:
+        return ""
+    if cleaned.lower() in {"signature of", "signature of hod", "signature of principal"}:
+        return ""
+    return cleaned
+
+
+def _title_name(name: str) -> str:
+    parts = [part.capitalize() for part in re.findall(r"[a-zA-Z]+", name)]
+    return " ".join(parts) if parts else name
 
 
 def _document_subject(text: str) -> str:
