@@ -44,6 +44,39 @@ This project combines two ideas:
 1. A real working Local Pilot desktop app.
 2. A clean layered agentic pipeline inspired by the 7-layer architecture plan.
 
+The long-term product is not just a PDF chatbot. Local Pilot should become a context-aware specialist router:
+
+```text
+Right-click selection
+    |
+    v
+Type + Task Detector
+    |
+    v
+Specialist Router
+    |
+    v
+Correct workflow for the selected context
+```
+
+This means Local Pilot should treat different selections differently:
+
+| Selected Context | Specialist | Main Jobs |
+| --- | --- | --- |
+| PDF, TXT, DOCX, PPTX, XLSX, Markdown | Document Specialist | Summarize, explain, extract key points, answer from sources, rewrite, translate |
+| Single code file | Code Specialist | Explain code, debug, find issues, suggest fixes, refactor, generate tests |
+| Project folder or repository | Repository Specialist | Map architecture, trace flows, explain modules, find important files, debug across files |
+| Empty or new project folder | Project Builder Specialist | Plan architecture, create files, generate code, run/test step by step |
+
+The important design principle is:
+
+```text
+One strong context engine first.
+Specialist behaviors on top.
+```
+
+Local Pilot should not start as a complicated multi-agent system. It should first build reliable context, memory, retrieval, and citations. Specialist workflows can then use that same engine.
+
 The final product architecture is:
 
 ```text
@@ -59,7 +92,13 @@ Local Pilot Desktop App
 Selection Gateway
     |
     v
-RAG Pipeline
+Type + Task Detector
+    |
+    v
+Specialist Router
+    |
+    v
+Context Engine / RAG Pipeline
     |
     v
 Model Router
@@ -70,6 +109,173 @@ Ollama / OpenAI / Claude / Gemini / Groq
     v
 Chat UI + Sources + Actions + History
 ```
+
+## Specialist Workflows
+
+### Document Specialist
+
+For PDFs, text files, Word documents, PowerPoint files, spreadsheets, Markdown, and similar documents.
+
+Supported actions:
+
+- summarize the document
+- explain the document
+- answer questions from the document
+- extract action items
+- find names, dates, risks, requirements, skills, projects, or decisions
+- rewrite or translate content
+- compare multiple selected documents later
+
+Document modes:
+
+```text
+Strict Sources
+    Answer only from the selected document or selected files.
+    If the answer is not present, say it was not found.
+
+Smart Assist
+    Use the selected document plus general model knowledge.
+    Clearly separate document facts from outside analysis or suggestions.
+```
+
+### Code Specialist
+
+For a selected source-code file.
+
+Supported actions:
+
+- explain what the code does
+- find bugs or risky logic
+- suggest fixes
+- refactor
+- generate tests
+- explain errors
+- propose safe edits with user approval
+
+Code modes:
+
+```text
+Repo Only
+    Use only selected code/project context.
+
+Repo + AI Knowledge
+    Use project context plus general programming knowledge.
+
+Generate Standalone
+    Generate independent code when no existing project context is needed.
+```
+
+### Repository Specialist
+
+For selected folders, codebases, and project directories.
+
+Supported actions:
+
+- explain project structure
+- identify entry points
+- trace authentication, API, database, frontend, or build flows
+- summarize modules
+- detect missing files or broken architecture
+- generate documentation
+- suggest improvements
+
+The Repository Specialist should build a repo map before answering:
+
+```text
+folder tree
+    |
+    v
+important files
+    |
+    v
+modules/functions/classes
+    |
+    v
+relationships and flows
+    |
+    v
+retrieved evidence for the question
+```
+
+### Project Builder Specialist
+
+For creating a new project or extending an existing one.
+
+Supported actions:
+
+- ask for missing requirements
+- generate architecture
+- create project structure
+- write files step by step
+- run checks/tests
+- debug failures
+- explain what changed
+
+Project Builder rules:
+
+```text
+New empty project
+    RAG is optional at the start.
+    The model can create an architecture from requirements.
+
+Existing project
+    RAG/context is required.
+    The model must follow the existing structure, imports, style, and dependencies.
+```
+
+## Context Modes
+
+Local Pilot should expose a clear mode switch because users sometimes want strict grounded answers and sometimes want broader help.
+
+For documents:
+
+```text
+[Strict Sources] [Smart Assist]
+```
+
+For code:
+
+```text
+[Repo Only] [Repo + AI Knowledge] [Generate Standalone]
+```
+
+For folders:
+
+```text
+[Explain] [Debug] [Improve] [Generate Docs]
+```
+
+For project building:
+
+```text
+[Plan First] [Create Files] [Run/Test]
+```
+
+Default mode should be strict and local-first:
+
+```text
+Documents -> Strict Sources
+Code -> Repo Only
+Folders -> Explain from selected folder
+```
+
+This keeps Local Pilot trustworthy. The user can switch to Smart Assist when they want broader reasoning.
+
+## When RAG Is Needed
+
+RAG is required when the answer must depend on selected files, folders, or existing project context.
+
+| Task | RAG Needed? | Reason |
+| --- | --- | --- |
+| Answer questions from a document | Yes | The answer must be grounded in the selected document. |
+| Summarize selected file/folder | Yes | The selected content is the source. |
+| Explain existing code | Yes | The model needs the actual code. |
+| Debug existing code | Yes | Bugs depend on implementation details. |
+| Modify an existing project | Yes | Generated code must fit current files, imports, style, and dependencies. |
+| Explain a repository architecture | Yes | Architecture comes from the folder and files. |
+| Generate a standalone script | Optional | General model knowledge may be enough. |
+| Create a brand-new empty project | Optional at first | The model can start from requirements, then store the generated project as context. |
+| Extend an existing project | Yes | Existing context is required to avoid breaking the project. |
 
 ## Internal RAG Pipeline
 
@@ -131,7 +337,18 @@ flowchart TD
     A[Windows Explorer Selection] --> B[Local Pilot Context Menu]
     B --> C[Desktop Popup Chat UI]
     C --> D[Selection Gateway]
-    D --> E[RAG Pipeline]
+    D --> T[Type + Task Detector]
+    T --> S[Specialist Router]
+
+    S --> SD[Document Specialist]
+    S --> SC[Code Specialist]
+    S --> SR[Repository Specialist]
+    S --> SP[Project Builder Specialist]
+
+    SD --> E[RAG Pipeline]
+    SC --> E
+    SR --> E
+    SP --> E
 
     subgraph E[RAG Pipeline]
         E1[User Action Layer]
