@@ -48,9 +48,7 @@ def answer_workspace(paths: list[str], question: str) -> dict:
         answer = "I don't see readable content in the selected workspace."
         sources = workspace["paths"]
     elif not memory_question:
-        extracted_answer = _profile_answer(question, chunks, extracted_text)
-        if not extracted_answer:
-            extracted_answer = _named_person_answer(question, extracted_text)
+        extracted_answer = _named_person_answer(question, extracted_text)
         if not extracted_answer:
             extracted_answer = _deterministic_answer(question, chunks, extracted_text)
         if extracted_answer:
@@ -264,6 +262,7 @@ def _named_person_answer(question: str, text: str) -> str | None:
     compact = " ".join(evidence[:18])
     compact = re.sub(r"\s+", " ", compact).strip()
 
+    profile_summary = _profile_summary_from_evidence(evidence)
     usn_match = re.search(r"\bUSN[:\s]+([A-Z0-9]+)", compact, re.I)
     degree_match = re.search(
         r"(Bachelor of Engineering in Computer Science\s*&?\s*Engineering\s*\(?Artificial Intelligence\)?)",
@@ -279,24 +278,49 @@ def _named_person_answer(question: str, text: str) -> str | None:
 
     subject = _title_name(name)
     facts = []
-    if degree_match:
+    if profile_summary:
+        answer = f"According to the selected document, {subject} is {profile_summary}"
+    elif degree_match:
         facts.append(f"is a student of {degree_match.group(1)}")
-    elif "student" in compact.lower():
-        facts.append("is described as a student")
-
-    if college_match:
-        facts.append(f"at {college_match.group(1)}")
-    if usn_match:
-        facts.append(f"with USN {usn_match.group(1)}")
-    if programme_match:
-        facts.append(f"connected to the {programme_match.group(1)}")
-
-    if facts:
+        if college_match:
+            facts.append(f"at {college_match.group(1)}")
+        if usn_match:
+            facts.append(f"with USN {usn_match.group(1)}")
+        if programme_match:
+            facts.append(f"connected to the {programme_match.group(1)}")
         answer = f"According to the selected document, {subject} " + ", ".join(facts) + "."
     else:
-        answer = f"According to the selected document, {subject} is mentioned in this context: " + compact[:500]
+        if "student" in compact.lower():
+            facts.append("is described as a student")
+        if college_match:
+            facts.append(f"at {college_match.group(1)}")
+        if usn_match:
+            facts.append(f"with USN {usn_match.group(1)}")
+        if programme_match:
+            facts.append(f"connected to the {programme_match.group(1)}")
+
+        if facts:
+            answer = f"According to the selected document, {subject} " + ", ".join(facts) + "."
+        else:
+            answer = f"According to the selected document, {subject} is mentioned in this context: " + compact[:500]
 
     return answer + "\n\nEvidence found:\n" + "\n".join(f"- {line}" for line in evidence[:8])
+
+
+def _profile_summary_from_evidence(evidence: list[str]) -> str:
+    for index, line in enumerate(evidence):
+        if line.lower() != "profile":
+            continue
+        following = [
+            item.rstrip(".")
+            for item in evidence[index + 1 : index + 4]
+            if item and len(item) > 25
+        ]
+        if following:
+            summary = " ".join(following)
+            summary = re.sub(r"\s+", " ", summary).strip()
+            return summary[:700] + "." if not summary.endswith(".") else summary[:700]
+    return ""
 
 
 def _clean_evidence_line(line: str) -> str:
@@ -567,6 +591,9 @@ def _build_grounded_prompt(
         "You are Local Pilot, a workspace-grounded AI assistant.\n"
         "Answer ONLY using the selected workspace context below.\n"
         "Do not use outside knowledge.\n"
+        "First infer what kind of file or workspace is selected from the provided chunks "
+        "(resume, report, textbook, company policy, slides, code, data, notes, or another type), "
+        "then answer according to that selected content.\n"
         "If the answer is present, answer directly and do not add uncertainty disclaimers.\n"
         "If the answer is not present in the selected files, say: "
         "\"I don't see that in the selected workspace.\"\n"
@@ -604,6 +631,14 @@ def _format_chunks(chunks: list[dict]) -> str:
 
 def _intent_instructions(question: str) -> str:
     lowered = question.lower()
+    if re.search(r"\bwho\s+(is|are|was|were)\b", lowered):
+        return (
+            "Identify the named person or entity from the selected context. "
+            "Use nearby evidence such as role, student status, organization, degree, report author, "
+            "or project relationship. If a cover page says 'Submitted by <name>', interpret that as "
+            "the person who submitted or authored the work, not as 'the person is submitted'. "
+            "Keep the answer concise and do not list unrelated projects unless the question asks for them."
+        )
     if "key point" in lowered or "important" in lowered:
         return "Extract the most important points from the selected context. Group related points when helpful."
     if "action" in lowered or "next step" in lowered or "risk" in lowered or "requirement" in lowered:
