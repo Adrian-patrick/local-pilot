@@ -459,25 +459,47 @@ class LocalPilotPopup:
             return
 
         for row in rows[:12]:
-            title = row["title"]
-            preview = row["preview"] or "No messages yet"
-            button = tk.Button(
+            bg = self.colors["sidebar_active"] if row["is_current"] else self.colors["sidebar"]
+            card = tk.Frame(
                 self.chat_history_frame,
-                text=f"{title}\n{preview}",
-                font=("Segoe UI", 9),
-                fg=self.colors["sidebar_text"],
-                bg=self.colors["sidebar_active"] if row["is_current"] else self.colors["sidebar"],
-                activebackground=self.colors["sidebar_active"],
-                activeforeground=self.colors["sidebar_text"],
-                relief=tk.FLAT,
+                bg=bg,
                 padx=10,
                 pady=8,
-                anchor="w",
-                justify="left",
-                wraplength=220,
-                command=lambda workspace_id=row["workspace_id"]: self._show_saved_chat(workspace_id),
             )
-            button.pack(fill="x", pady=(0, 4))
+            card.pack(fill="x", pady=(0, 6))
+            card.columnconfigure(0, weight=1)
+
+            meta = "Current file" if row["is_current"] else row["kind_label"]
+            tk.Label(
+                card,
+                text=meta,
+                font=("Segoe UI", 7, "bold"),
+                fg=self.colors["sidebar_muted"],
+                bg=bg,
+                anchor="w",
+            ).grid(row=0, column=0, sticky="ew")
+            tk.Label(
+                card,
+                text=row["file_name"],
+                font=("Segoe UI", 9, "bold"),
+                fg=self.colors["sidebar_text"],
+                bg=bg,
+                anchor="w",
+                wraplength=220,
+                justify="left",
+            ).grid(row=1, column=0, sticky="ew", pady=(2, 0))
+            tk.Label(
+                card,
+                text=row["preview"] or "No messages yet",
+                font=("Segoe UI", 8),
+                fg=self.colors["sidebar_text"],
+                bg=bg,
+                anchor="w",
+                wraplength=220,
+                justify="left",
+            ).grid(row=2, column=0, sticky="ew", pady=(3, 0))
+
+            self._bind_history_card(card, row["workspace_id"])
 
     def _recent_chat_rows(self) -> list[dict]:
         current_item_id = path_id(self.selected_path)
@@ -495,6 +517,14 @@ class LocalPilotPopup:
                         ORDER BY m2.id DESC
                         LIMIT 1
                     ) AS preview,
+                    (
+                        SELECT content
+                        FROM messages m3
+                        WHERE m3.workspace_id = workspaces.id
+                          AND m3.role = 'user'
+                        ORDER BY m3.id DESC
+                        LIMIT 1
+                    ) AS last_question,
                     SUM(CASE WHEN workspace_items.item_id = ? THEN 1 ELSE 0 END) AS current_count
                 FROM workspaces
                 LEFT JOIN workspace_items ON workspace_items.workspace_id = workspaces.id
@@ -510,11 +540,37 @@ class LocalPilotPopup:
             {
                 "workspace_id": row["workspace_id"],
                 "title": self._short_title(row["title"]),
-                "preview": self._short_title(row["preview"] or "", limit=44),
+                "file_name": self._history_file_name(row["title"]),
+                "kind_label": self._history_kind_label(row["title"]),
+                "preview": self._short_title(row["last_question"] or row["preview"] or "", limit=58),
                 "is_current": bool(row["current_count"]),
             }
             for row in rows
         ]
+
+    def _bind_history_card(self, widget: tk.Widget, workspace_id: str) -> None:
+        widget.bind("<Button-1>", lambda _event: self._show_saved_chat(workspace_id))
+        widget.configure(cursor="hand2")
+        for child in widget.winfo_children():
+            self._bind_history_card(child, workspace_id)
+
+    def _history_file_name(self, title: str) -> str:
+        value = str(title or "").strip()
+        if not value:
+            return "Untitled chat"
+        path = Path(value)
+        if path.name and ("\\" in value or "/" in value):
+            return self._short_title(path.name, limit=34)
+        return self._short_title(value, limit=34)
+
+    def _history_kind_label(self, title: str) -> str:
+        value = str(title or "")
+        if value.lower().endswith(" selected items"):
+            return "Workspace"
+        suffix = Path(value).suffix.lower()
+        if suffix:
+            return f"File {suffix}"
+        return "Chat"
 
     def _show_saved_chat(self, workspace_id: str) -> None:
         self._clear_messages()
