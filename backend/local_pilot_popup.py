@@ -168,7 +168,7 @@ class LocalPilotPopup:
         history_header.columnconfigure(0, weight=1)
         tk.Label(
             history_header,
-            text="Chats",
+            text="Chats for this file",
             font=("Segoe UI", 9, "bold"),
             fg=self.colors["sidebar_muted"],
             bg=self.colors["sidebar"],
@@ -525,10 +525,11 @@ class LocalPilotPopup:
                         ORDER BY m3.id DESC
                         LIMIT 1
                     ) AS last_question,
-                    SUM(CASE WHEN workspace_items.item_id = ? THEN 1 ELSE 0 END) AS current_count
+                    1 AS current_count
                 FROM workspaces
-                LEFT JOIN workspace_items ON workspace_items.workspace_id = workspaces.id
+                JOIN workspace_items ON workspace_items.workspace_id = workspaces.id
                 LEFT JOIN messages ON messages.workspace_id = workspaces.id
+                WHERE workspace_items.item_id = ?
                 GROUP BY workspaces.id, workspaces.title
                 ORDER BY COALESCE(last_message_id, 0) DESC, workspaces.updated_at DESC
                 LIMIT 20
