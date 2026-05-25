@@ -1,26 +1,264 @@
 # Local Pilot
 
-Local Pilot is an OS-native contextual AI layer for files, folders, and codebases.
+Local Pilot is an OS-native contextual AI assistant for files, folders, and codebases.
 
-The Stage 1 prototype proves one core workflow:
+The core workflow is simple:
 
 ```text
-Right click a file or folder -> Ask Local Pilot -> get a contextual answer
+Right click a file or folder -> Local Pilot opens -> ask questions -> get grounded answers with sources
 ```
 
-## Stage 1 Scope
+Instead of opening a chatbot, uploading files, and explaining context manually, Local Pilot starts from the file or folder the user is already working with.
 
-The first build focuses on Windows Explorer integration.
+## Current Stage
 
-Supported early inputs:
+Stage 1 is a Windows-first MVP.
 
-- PDF files
-- DOCX and PPTX files
-- TXT and Markdown files
-- Python, JavaScript, TypeScript, HTML, CSS, JSON, YAML, and similar text/code files
-- Folders and code repositories
+Currently implemented:
 
-Stage 1 does not include autonomous agents, voice control, browser control, full OS memory, or cross-device sync.
+- Windows Explorer right-click integration
+- Desktop popup chat UI
+- Local Ollama support
+- Optional OpenAI, Claude, Gemini, and Groq provider settings
+- Setup checker for Python, context menu, Ollama, provider, and local storage
+- PDF, DOCX, PPTX, XLSX, TXT, Markdown, JSON, CSV, SQL, log, and code-file extraction
+- Folder scanning with ignored build/cache/binary folders
+- Local SQLite memory for indexed chunks and chat history
+- Per-file and workspace-style answering
+- Source references for answers
+
+Not yet included:
+
+- Packaged installer
+- Modern Windows 11 main context-menu shell extension
+- Image OCR
+- Old `.doc` and `.ppt` parsing
+- Full vector database retrieval
+- Autonomous code-editing agent
+- macOS Finder or Linux file-manager integration
+
+## Product Architecture
+
+This project combines two ideas:
+
+1. A real working Local Pilot desktop app.
+2. A clean layered agentic pipeline inspired by the 7-layer architecture plan.
+
+The final product architecture is:
+
+```text
+Windows Explorer
+    |
+    v
+Right-Click Context Menu
+    |
+    v
+Local Pilot Desktop App
+    |
+    v
+Selection Gateway
+    |
+    v
+RAG Pipeline
+    |
+    v
+Model Router
+    |
+    v
+Ollama / OpenAI / Claude / Gemini / Groq
+    |
+    v
+Chat UI + Sources + Actions + History
+```
+
+## Internal RAG Pipeline
+
+The RAG pipeline is the brain of Local Pilot. Context building, extraction, indexing, memory, retrieval, and correction all belong inside this pipeline.
+
+```text
+RAG Pipeline
+    |
+    v
+User Action Layer
+    |
+    v
+OS Context Layer
+    |
+    v
+Context Builder
+    |
+    v
+Content Router
+    |
+    v
+Extraction Pipeline
+    |
+    v
+Chunking + Indexing
+    |
+    v
+Per-File / Per-Folder Memory
+    |
+    v
+Hybrid Retrieval
+    |
+    v
+Agentic Corrective RAG
+    |
+    v
+Grounded Answer Package
+```
+
+### Layer Responsibilities
+
+| Layer | Responsibility |
+| --- | --- |
+| User Action Layer | Receives the selected file, files, or folder from Explorer. |
+| OS Context Layer | Normalizes paths and captures platform/context-menu metadata. |
+| Context Builder | Builds the workspace context: selected item, parent folder, neighboring files, and previous memory. |
+| Content Router | Chooses the correct processor for PDFs, Office files, text, code, folders, and future images. |
+| Extraction Pipeline | Converts supported files into clean text plus metadata. |
+| Chunking + Indexing | Splits extracted content into searchable source chunks and stores them locally. |
+| Memory | Keeps per-file, per-folder, and workspace chat history. |
+| Hybrid Retrieval | Finds the best evidence using lexical search now, with embeddings/reranking planned. |
+| Agentic Corrective RAG | Generates an answer, checks grounding, and retries or says it cannot find enough evidence. |
+| Answer Package | Returns answer text, source references, confidence signals, and suggested actions. |
+
+## Pipeline Diagram
+
+```mermaid
+flowchart TD
+    A[Windows Explorer Selection] --> B[Local Pilot Context Menu]
+    B --> C[Desktop Popup Chat UI]
+    C --> D[Selection Gateway]
+    D --> E[RAG Pipeline]
+
+    subgraph E[RAG Pipeline]
+        E1[User Action Layer]
+        E2[OS Context Layer]
+        E3[Context Builder]
+        E4[Content Router]
+        E5[Extraction Pipeline]
+        E6[Chunking + Indexing]
+        E7[Per-File / Per-Folder Memory]
+        E8[Hybrid Retrieval]
+        E9[Agentic Corrective RAG]
+        E10[Grounded Answer Package]
+
+        E1 --> E2 --> E3 --> E4 --> E5 --> E6 --> E7 --> E8 --> E9 --> E10
+    end
+
+    E10 --> F[Model Router]
+    F --> G1[Ollama Local]
+    F --> G2[OpenAI]
+    F --> G3[Claude]
+    F --> G4[Gemini]
+    F --> G5[Groq]
+    G1 --> H[Answer UI]
+    G2 --> H
+    G3 --> H
+    G4 --> H
+    G5 --> H
+```
+
+## Memory Design
+
+Local Pilot stores memory locally in SQLite:
+
+```text
+data/local_pilot.db
+```
+
+The memory model is:
+
+```text
+File memory
+    - path
+    - content hash
+    - extracted chunks
+    - metadata
+    - chat history for that file
+
+Folder memory
+    - folder path
+    - folder structure
+    - indexed supported files
+    - workspace chat history
+
+Workspace memory
+    - one file
+    - multiple selected files
+    - one folder
+    - future mixed selections
+```
+
+This means each selected item can have its own stored knowledge, while multi-file and folder workflows can answer using the whole workspace.
+
+## Model Routing
+
+Local Pilot is local-first.
+
+```text
+Default: Ollama
+Optional: OpenAI / Claude / Gemini / Groq
+Mode: auto with cloud fallback only if enabled
+```
+
+Provider flow:
+
+```text
+Question + retrieved chunks
+    |
+    v
+Model Router
+    |
+    +--> Ollama if local mode is selected
+    +--> Cloud provider if selected and API key exists
+    +--> Cloud fallback only if the user enabled fallback
+```
+
+Privacy rule:
+
+```text
+Local mode keeps selected context on this computer.
+Cloud mode can send selected retrieved chunks to the chosen API provider.
+```
+
+## Codebase Direction
+
+The current app works, but the long-term codebase should be organized around a clean pipeline module:
+
+```text
+backend/
+  local_pilot_popup.py
+  app/
+    pipeline/
+      state.py
+      orchestrator.py
+      user_action.py
+      os_context.py
+      context_builder.py
+      content_router.py
+      extraction.py
+      indexing.py
+      retrieval.py
+      agent.py
+      response.py
+    extractors.py
+    rag_engine.py
+    rag_store.py
+    settings_store.py
+    setup_check.py
+    llm/
+      router.py
+      ollama_client.py
+      openai_client.py
+      anthropic_client.py
+      gemini_client.py
+      groq_client.py
+```
+
+The current MVP can keep working while logic is gradually moved into `backend/app/pipeline/`.
 
 ## Current Project Structure
 
@@ -28,71 +266,62 @@ Stage 1 does not include autonomous agents, voice control, browser control, full
 local-pilot/
   backend/
     app/
-      main.py              FastAPI app
-      agent.py             Stage 1 answer runtime
-      rag_engine.py        Local corrective RAG flow
-      setup_check.py       First-run readiness checks
-      llm/                 Model router for Ollama/OpenAI/Claude/Gemini/Groq
-      rag_store.py         SQLite item memory and chunk store
-      context_collector.py File/folder context and readable content collection
-      extractors.py        Text, PDF, DOCX, and PPTX extraction
-      folder_scanner.py    Folder scanner with binary/build output filtering
-      schemas.py           API request/response models
-    local_pilot_cli.py     CLI entry point for context-menu testing
+      main.py
+      rag_engine.py
+      setup_check.py
+      context_collector.py
+      extractors.py
+      folder_scanner.py
+      rag_store.py
+      settings_store.py
+      schemas.py
+      llm/
+    local_pilot_popup.py
+    local_pilot_cli.py
   desktop/
     registry/
+      install-local-pilot-dev.ps1
+      check-local-pilot-dev.ps1
       add-local-pilot-dev.reg
       remove-local-pilot.reg
+  data/
+    local_pilot.db
   docs/
-    github-ownership.md
-    stage-1-build-plan.md
+  requirements.txt
 ```
 
-## Run The CLI Prototype
+## Run The Desktop MVP
 
-From the repo root:
+Install dependencies:
 
 ```bash
 pip install -r requirements.txt
-python backend/local_pilot_cli.py "C:\Path\To\FileOrFolder"
 ```
 
-## Run The API
+Install the development context-menu entry:
 
-```bash
-uvicorn backend.app.main:app --reload
+```powershell
+powershell.exe -ExecutionPolicy Bypass -File desktop\registry\install-local-pilot-dev.ps1
 ```
 
-Then open:
+Check setup:
 
-```text
-http://127.0.0.1:8000/health
-```
-
-Example API request:
-
-```bash
-curl -X POST http://127.0.0.1:8000/ask ^
-  -H "Content-Type: application/json" ^
-  -d "{\"path\":\"C:\\Path\\To\\FileOrFolder\",\"question\":\"Summarize this\"}"
-```
-
-## Add Windows Context Menu Entry
-
-For development, run:
-
-```text
-powershell.exe -ExecutionPolicy Bypass -File desktop/registry/install-local-pilot-dev.ps1
+```powershell
+powershell.exe -ExecutionPolicy Bypass -File desktop\registry\check-local-pilot-dev.ps1
 ```
 
 Then:
 
 1. Right click a file or folder.
-2. On Windows 11, choose `Show more options`.
+2. On Windows 11, choose `Show more options` if needed.
 3. Click `Local Pilot`.
-4. Ask a question in the popup chat window.
+4. Ask questions in the popup chat window.
 
-The popup uses Ollama locally. Quick test model:
+## Ollama Setup
+
+Local Pilot uses Ollama by default.
+
+Small fast model:
 
 ```bash
 ollama pull gemma3:1b
@@ -104,113 +333,88 @@ Stronger model:
 ollama pull qwen3:8b
 ```
 
-For slower machines:
+Check installed models:
 
 ```bash
-ollama pull qwen3:4b
+ollama list
 ```
 
-If `ollama` is not recognized in PowerShell, open the Ollama app once or restart your terminal after installing Ollama.
+If `ollama` is not recognized, open the Ollama desktop app once or restart the terminal.
 
-The popup also has a `Settings` button where you can choose the model provider, change model names, and add API keys.
-Use the `Setup` button to check whether Ollama, the context menu, the selected provider, and local memory are ready.
+## API And CLI
 
-## AI Providers
-
-Local Pilot uses Ollama by default so selected file content stays on your computer.
-
-In the popup, click `Settings` to configure:
-
-- provider: Ollama, auto, OpenAI, Claude, Gemini, or Groq
-- model names
-- API keys
-- cloud fallback behavior
-
-Configure the provider with environment variables:
+Run the API:
 
 ```bash
-LOCAL_PILOT_MODEL_PROVIDER=ollama
-OLLAMA_MODEL=gemma3:1b
+uvicorn backend.app.main:app --reload
 ```
 
-Supported provider values:
+Health check:
 
 ```text
-ollama
-openai
-anthropic
-gemini
-groq
-auto
+http://127.0.0.1:8000/health
 ```
 
-Cloud providers need API keys:
+CLI test:
 
 ```bash
-OPENAI_API_KEY=...
-ANTHROPIC_API_KEY=...
-GEMINI_API_KEY=...
-GROQ_API_KEY=...
+python backend/local_pilot_cli.py "C:\Path\To\FileOrFolder"
 ```
 
-`auto` tries Ollama first. Cloud fallback is disabled unless explicitly enabled:
+## Roadmap
 
-```bash
-LOCAL_PILOT_MODEL_PROVIDER=auto
-LOCAL_PILOT_ALLOW_CLOUD_FALLBACK=true
-```
+### Stage 1: Working Contextual File Chat
 
-Privacy rule: cloud providers receive the selected chunks needed to answer the question.
+- Windows right-click integration
+- Local popup chat UI
+- File/folder extraction
+- Local memory
+- Ollama/local model answering
+- Optional cloud providers
 
-The backend also exposes provider settings for a future React/Electron settings screen:
+### Stage 2: Strong RAG Engine
 
-```text
-GET  /settings
-POST /settings
-GET  /models?provider=ollama
-GET  /setup/status
-```
+- Clean `pipeline/` module
+- Better retrieval
+- Embeddings
+- BM25 + vector hybrid search
+- Reranking
+- Better citations with page/slide/file references
+- Multi-file selection
 
-## Local RAG Memory
+### Stage 3: Codebase Intelligence
 
-Local Pilot stores per-file/folder memory locally:
+- Code-aware chunking
+- Repository map
+- Dependency/function/class understanding
+- Architecture explanation
+- Debugging assistance
+- Safe code-change suggestions
 
-```text
-backend/data/local_pilot.db
-```
+### Stage 4: Agentic Workflows
 
-For each selected item it stores:
+- Corrective RAG validation loop
+- Action planning
+- File edits with approval
+- Test runner integration
+- Documentation generation
 
-- extracted chunks
-- content hash
-- chat history
-- source references
+### Stage 5: Distribution
 
-Answers are built from retrieved chunks from the selected item, then sent to Ollama.
-For folders, Local Pilot stores the folder structure plus readable contents from supported files.
+- Installer
+- First-run setup wizard
+- Ollama detection and guidance
+- Context-menu install/uninstall
+- Signed release builds
 
-## Workspace Engine
+## Development Principle
 
-Every selection is treated as a workspace internally:
+Local Pilot should stay:
 
-```text
-one file -> workspace with one item
-many files -> workspace with many items
-folder -> workspace with folder context
-```
+- local-first
+- source-grounded
+- file/folder aware
+- fast from Explorer
+- honest when the selected context does not contain the answer
 
-The current right-click popup still passes one path, but the backend now supports multi-path workspaces through `answer_workspace(paths, question)`.
-
-To remove it, double-click:
-
-```text
-desktop/registry/remove-local-pilot.reg
-```
-
-## GitHub Authorship
-
-This repo can be owned by Adrian while your commits still show as yours. See:
-
-```text
-docs/github-ownership.md
-```
+The goal is not just another chatbot. The goal is an AI assistant that understands the thing the user already selected.
