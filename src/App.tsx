@@ -21,14 +21,13 @@ function App() {
           <LoadingState />
         ) : error ? (
           <ErrorState error={error} filePath={filePath} />
-        ) : metadata ? (
-          <>
-            <FileInfoCard metadata={metadata} />
-            <AskSection />
-          </>
         ) : (
-          <EmptyState />
+          <>
+            {metadata ? <FileInfoCard metadata={metadata} /> : <EmptyState />}
+            <AskSection metadata={metadata} />
+          </>
         )}
+
       </main>
     </div>
   );
