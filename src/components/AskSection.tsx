@@ -75,21 +75,20 @@ export function AskSection({ metadata }: { metadata: FileMetadata | null }) {
       let prompt = "";
       if (metadata) {
         prompt = `You are Local Pilot, an offline, highly intelligent software developer assistant.
-You are helping the user with their loaded file.
+You are helping the user with their loaded ${metadata.is_dir ? "directory" : "file"}.
 
 ---
-FILE DETAILS:
+${metadata.is_dir ? "DIRECTORY" : "FILE"} DETAILS:
 Name: ${metadata.file_name}
 Path: ${metadata.full_path}
-Size: ${metadata.file_size} bytes
-Last Modified: ${metadata.last_modified}
+${metadata.is_dir ? "" : `Size: ${metadata.file_size} bytes\n`}Last Modified: ${metadata.last_modified}
 ---
-FILE CONTENTS:
+${metadata.is_dir ? "DIRECTORY TREE" : "FILE CONTENTS"}:
 ${fileContent}
 ---
 
 INSTRUCTIONS:
-- Analyze the file contents and metadata provided above.
+- Analyze the ${metadata.is_dir ? "directory structure" : "file contents"} and metadata provided above.
 - Answer the user's question directly, clearly, and concisely.
 - For code improvements or explanations, write premium clean code blocks with clear syntax.
 
@@ -126,11 +125,17 @@ ${userText}`;
   };
 
   const samplePrompts = metadata
-    ? [
-        { label: "Summarize File", text: "Please write a concise technical summary of this file's contents, explaining its main purpose and structure." },
-        { label: "Find Potential Bugs", text: "Look closely at this file and point out any potential bugs, safety issues, logical errors, or code smells." },
-        { label: "Explain Code", text: "Can you provide a step-by-step technical explanation of what this file does?" },
-      ]
+    ? metadata.is_dir
+      ? [
+          { label: "Summarize Directory", text: "Please summarize the purpose of this directory based on its contents and structure." },
+          { label: "Find Main Files", text: "Identify the most critical files in this directory and explain what they likely do." },
+          { label: "Explain Structure", text: "Can you explain the architectural structure and organization of this folder?" },
+        ]
+      : [
+          { label: "Summarize File", text: "Please write a concise technical summary of this file's contents, explaining its main purpose and structure." },
+          { label: "Find Potential Bugs", text: "Look closely at this file and point out any potential bugs, safety issues, logical errors, or code smells." },
+          { label: "Explain Code", text: "Can you provide a step-by-step technical explanation of what this file does?" },
+        ]
     : [
         { label: "Write a Fast API Mock", text: "Write a simple FastAPI mock server in Python that returns standard dummy JSON values." },
         { label: "Learn about Ollama", text: "How does Ollama work under the hood? Explain its model management and endpoint system." },

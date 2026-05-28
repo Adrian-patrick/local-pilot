@@ -10,6 +10,7 @@ struct FileMetadata {
     extension: String,
     file_size: u64,
     last_modified: String,
+    is_dir: bool,
 }
 
 #[derive(serde::Deserialize)]
@@ -38,14 +39,13 @@ struct OllamaGenerateResponse {
 fn get_file_metadata(file_path: String) -> Result<FileMetadata, String> {
     let path = Path::new(&file_path);
     if !path.exists() {
-        return Err(format!("File does not exist: {}", file_path));
-    }
-    if !path.is_file() {
-        return Err(format!("Path is not a file: {}", file_path));
+        return Err(format!("Path does not exist: {}", file_path));
     }
 
     let metadata = fs::metadata(path)
         .map_err(|e| format!("Failed to read metadata: {}", e))?;
+
+    let is_dir = path.is_dir();
 
     let file_name = path
         .file_name()
@@ -59,13 +59,16 @@ fn get_file_metadata(file_path: String) -> Result<FileMetadata, String> {
         .map(|s| s.strip_prefix(r"\\?\").unwrap_or(&s).to_string())
         .unwrap_or_else(|_| path.to_string_lossy().to_string());
 
-    let extension = path
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("")
-        .to_uppercase();
+    let extension = if is_dir {
+        "FOLDER".to_string()
+    } else {
+        path.extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("")
+            .to_uppercase()
+    };
 
-    let file_size = metadata.len();
+    let file_size = if is_dir { 0 } else { metadata.len() };
 
     let last_modified = metadata
         .modified()
@@ -82,6 +85,7 @@ fn get_file_metadata(file_path: String) -> Result<FileMetadata, String> {
         extension,
         file_size,
         last_modified,
+        is_dir,
     })
 }
 
@@ -99,18 +103,109 @@ fn get_selected_file_path() -> Option<String> {
     None
 }
 
+fn build_dir_tree(dir: &Path, depth: usize, max_depth: usize, count: &mut usize, max_items: usize) -> String {
+    if depth > max_depth || *count >= max_items {
+        return String::new();
+    }
+    let mut tree = String::new();
+    let indent = "  ".repeat(depth);
+    
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            if *count >= max_items {
+                tree.push_str(&format!("{}... (tree truncated, max {} items reached)\n", indent, max_items));
+                break;
+            }
+            *count += 1;
+            let name = entry.file_name().to_string_lossy().to_string();
+            let is_dir = entry.path().is_dir();
+            if is_dir {
+                tree.push_str(&format!("{}- {}/\n", indent, name));
+                tree.push_str(&build_dir_tree(&entry.path(), depth + 1, max_depth, count, max_items));
+            } else {
+                tree.push_str(&format!("{}- {}\n", indent, name));
+            }
+        }
+    }
+    tree
+}
+
+fn extract_docx(path: &Path) -> Result<String, String> {
+    let file = fs::File::open(path).map_err(|e| e.to_string())?;
+    let mut archive = zip::ZipArchive::new(file).map_err(|e| e.to_string())?;
+    let mut doc_xml = archive.by_name("word/document.xml").map_err(|e| e.to_string())?;
+    let mut xml_content = String::new();
+    doc_xml.read_to_string(&mut xml_content).map_err(|e| e.to_string())?;
+    
+    // Strip XML tags to get raw text
+    let mut text = String::new();
+    let mut in_tag = false;
+    for c in xml_content.chars() {
+        if c == '<' {
+            in_tag = true;
+        } else if c == '>' {
+            in_tag = false;
+            text.push(' ');
+        } else if !in_tag {
+            text.push(c);
+        }
+    }
+    let clean_text = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    Ok(clean_text)
+}
+
+fn extract_printable_strings(bytes: &[u8]) -> String {
+    let mut result = String::new();
+    let mut current_string = String::new();
+    
+    for &b in bytes {
+        if b >= 32 && b <= 126 {
+            current_string.push(b as char);
+        } else {
+            if current_string.len() >= 4 {
+                result.push_str(&current_string);
+                result.push('\n');
+            }
+            current_string.clear();
+        }
+    }
+    if current_string.len() >= 4 {
+        result.push_str(&current_string);
+    }
+    result
+}
+
 #[tauri::command]
 fn read_file_content(file_path: String) -> Result<String, String> {
     let path = Path::new(&file_path);
     if !path.exists() {
-        return Err(format!("File does not exist: {}", file_path));
+        return Err(format!("Path does not exist: {}", file_path));
     }
-    if !path.is_file() {
-        return Err(format!("Path is not a file: {}", file_path));
+
+    if path.is_dir() {
+        let mut count = 0;
+        let tree = build_dir_tree(path, 0, 3, &mut count, 100);
+        return Ok(format!("Directory Structure:\n{}", tree));
+    }
+
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+    
+    if ext == "pdf" {
+        return match pdf_extract::extract_text(path) {
+            Ok(text) => Ok(text),
+            Err(e) => Ok(format!("[Failed to parse PDF: {}]", e)),
+        };
+    }
+    
+    if ext == "docx" {
+        return match extract_docx(path) {
+            Ok(text) => Ok(text),
+            Err(e) => Ok(format!("[Failed to parse DOCX: {}]", e)),
+        };
     }
 
     let mut file = fs::File::open(path).map_err(|e| format!("Failed to open file: {}", e))?;
-    let max_read = 50 * 1024; // 50 KB safe limit
+    let max_read = 100 * 1024; // 100 KB safe limit for generic files
     let mut buffer = vec![0; max_read + 1];
     let bytes_read = file.read(&mut buffer).map_err(|e| format!("Failed to read file: {}", e))?;
 
@@ -123,13 +218,12 @@ fn read_file_content(file_path: String) -> Result<String, String> {
     match String::from_utf8(read_slice.to_vec()) {
         Ok(text) => {
             if bytes_read > max_read {
-                // Safely find the UTF-8 boundary to avoid panic on slicing
                 let mut end = max_read;
                 while !text.is_char_boundary(end) && end > 0 {
                     end -= 1;
                 }
                 Ok(format!(
-                    "{}\n\n[WARNING: File contents truncated to 50KB to respect context limits]",
+                    "{}\n\n[WARNING: File contents truncated to 100KB to respect context limits]",
                     &text[..end]
                 ))
             } else {
@@ -137,8 +231,9 @@ fn read_file_content(file_path: String) -> Result<String, String> {
             }
         }
         Err(_) => {
-            // Keep app premium and safe by bypassing non-UTF-8 binary data
-            Ok("[Binary file: unable to read text contents]".to_string())
+            // Fallback to extracting printable ASCII strings from binary
+            let strings = extract_printable_strings(read_slice);
+            Ok(format!("[Binary file detected. Extracted readable strings:]\n{}", strings))
         }
     }
 }

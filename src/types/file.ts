@@ -4,4 +4,5 @@ export interface FileMetadata {
   extension: string;
   file_size: number;
   last_modified: string;
+  is_dir: boolean;
 }
