@@ -28,6 +28,12 @@ def answer_with_rag(path: str, question: str) -> dict:
 
 
 def answer_workspace(paths: list[str], question: str) -> dict:
+    from .agentic_rag import answer
+
+    return answer(paths, question)
+
+
+def _answer_workspace_legacy(paths: list[str], question: str) -> dict:
     contexts = [collect_context(path) for path in paths]
     workspace = _ensure_workspace(contexts)
     extracted_text = "\n\n".join(context.get("text") or "" for context in contexts)

@@ -25,6 +25,7 @@ Currently implemented:
 - Folder scanning with ignored build/cache/binary folders
 - Local SQLite memory for indexed chunks and chat history
 - Per-file and workspace-style answering
+- Agentic RAG engine module with ingestion, hybrid retrieval, corrective validation, and retry orchestration
 - Source references for answers
 
 Not yet included:
@@ -484,6 +485,12 @@ local-pilot/
   backend/
     app/
       main.py
+      agentic_rag/
+        engine.py
+        ingestion.py
+        retriever.py
+        corrective_agent.py
+        models.py
       rag_engine.py
       setup_check.py
       context_collector.py
