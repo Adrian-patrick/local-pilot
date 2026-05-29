@@ -10,6 +10,17 @@ Right click a file or folder -> Local Pilot opens -> ask questions -> get ground
 
 Instead of opening a chatbot, uploading files, and explaining context manually, Local Pilot starts from the file or folder the user is already working with.
 
+Local Pilot now supports two answer modes:
+
+```text
+Selected Files Only
+    Strict RAG. Answers only from selected file/folder chunks.
+
+Files + AI Knowledge
+    Uses selected chunks as grounding plus the model's general knowledge for suggestions,
+    comparisons, improvements, and explanations.
+```
+
 ## Current Stage
 
 Stage 1 is a Windows-first MVP.
@@ -35,7 +46,10 @@ Not yet included:
 - Modern Windows 11 main context-menu shell extension
 - Image OCR
 - Old `.doc` and `.ppt` parsing
-- Full vector database retrieval
+- ChromaDB/vector database retrieval
+- Cross-encoder reranking
+- RAGAS evaluation
+- Page/slide/function-level citations
 - Autonomous code-editing agent
 - macOS Finder or Linux file-manager integration
 
@@ -98,6 +112,15 @@ Type + Task Detector
     |
     v
 Specialist Router
+    |
+    v
+Answer Mode Router
+    |
+    +--> Selected Files Only
+    |       Strict source-grounded RAG
+    |
+    +--> Files + AI Knowledge
+            Selected context + model knowledge
     |
     v
 Context Engine / RAG Pipeline
@@ -227,41 +250,58 @@ Existing project
 
 ## Context Modes
 
-Local Pilot should expose a clear mode switch because users sometimes want strict grounded answers and sometimes want broader help.
+Local Pilot exposes a clear mode switch because users sometimes want strict grounded answers and sometimes want broader help.
 
-For documents:
-
-```text
-[Strict Sources] [Smart Assist]
-```
-
-For code:
+Current implemented modes:
 
 ```text
-[Repo Only] [Repo + AI Knowledge] [Generate Standalone]
+[Selected Files Only] [Files + AI Knowledge]
 ```
 
-For folders:
+`Selected Files Only` is the default. It is the privacy-first mode:
 
 ```text
-[Explain] [Debug] [Improve] [Generate Docs]
+selected file/folder
+    -> extract
+    -> chunk
+    -> retrieve
+    -> answer only from retrieved selected context
 ```
 
-For project building:
+If the selected context does not contain the answer, Local Pilot should say it does not see the answer in the selected workspace.
+
+`Files + AI Knowledge` is the broader help mode:
 
 ```text
-[Plan First] [Create Files] [Run/Test]
+selected file/folder context
+    +
+model pretrained knowledge
+    -> answer with separated sections
 ```
 
-Default mode should be strict and local-first:
+Smart-mode answers are shaped as:
+
+```text
+From selected file:
+...
+
+AI knowledge / suggestions:
+...
+
+Next steps:
+...
+```
+
+Future specialist-specific modes:
 
 ```text
 Documents -> Strict Sources
 Code -> Repo Only
 Folders -> Explain from selected folder
+Project Builder -> Plan First
 ```
 
-This keeps Local Pilot trustworthy. The user can switch to Smart Assist when they want broader reasoning.
+This keeps Local Pilot trustworthy while still allowing useful general advice when the user explicitly chooses it.
 
 ## When RAG Is Needed
 
@@ -311,6 +351,13 @@ Per-File / Per-Folder Memory
 Hybrid Retrieval
     |
     v
+Answer Mode Router
+    |
+    +--> Strict source-grounded prompt
+    |
+    +--> Smart context + AI knowledge prompt
+    |
+    v
 Agentic Corrective RAG
     |
     v
@@ -329,6 +376,7 @@ Grounded Answer Package
 | Chunking + Indexing | Splits extracted content into searchable source chunks and stores them locally. |
 | Memory | Keeps per-file, per-folder, and workspace chat history. |
 | Hybrid Retrieval | Finds the best evidence using lexical search now, with embeddings/reranking planned. |
+| Answer Mode Router | Selects strict selected-file-only answering or selected-context-plus-model-knowledge answering. |
 | Agentic Corrective RAG | Generates an answer, checks grounding, and retries or says it cannot find enough evidence. |
 | Answer Package | Returns answer text, source references, confidence signals, and suggested actions. |
 
@@ -361,13 +409,14 @@ flowchart TD
         E6[Chunking + Indexing]
         E7[Per-File / Per-Folder Memory]
         E8[Hybrid Retrieval]
-        E9[Agentic Corrective RAG]
-        E10[Grounded Answer Package]
+        E9[Answer Mode Router]
+        E10[Agentic Corrective RAG]
+        E11[Grounded Answer Package]
 
-        E1 --> E2 --> E3 --> E4 --> E5 --> E6 --> E7 --> E8 --> E9 --> E10
+        E1 --> E2 --> E3 --> E4 --> E5 --> E6 --> E7 --> E8 --> E9 --> E10 --> E11
     end
 
-    E10 --> F[Model Router]
+    E11 --> F[Model Router]
     F --> G1[Ollama Local]
     F --> G2[OpenAI]
     F --> G3[Claude]
@@ -443,9 +492,35 @@ Local mode keeps selected context on this computer.
 Cloud mode can send selected retrieved chunks to the chosen API provider.
 ```
 
+Answer mode privacy:
+
+```text
+Selected Files Only
+    Uses only retrieved chunks from selected local context.
+
+Files + AI Knowledge with Ollama
+    Uses selected chunks plus local model knowledge on this computer.
+
+Files + AI Knowledge with cloud provider
+    Selected chunks may be sent to the chosen provider, and the provider can use its model knowledge.
+```
+
 ## Codebase Direction
 
-The current app works, but the long-term codebase should be organized around a clean pipeline module:
+The current app works through `backend/app/agentic_rag/`. The longer-term codebase can still move toward a broader `pipeline/` module when specialist routing grows.
+
+Current implemented Agentic RAG module:
+
+```text
+backend/app/agentic_rag/
+  engine.py            Orchestrates ingestion, retrieval, memory, answering, and saving messages
+  ingestion.py         Collects selected paths, extracts text, chunks content, stores per-file chunks
+  retriever.py         Hybrid retrieval using BM25-style sparse scoring, term-vector scoring, exact match, and section metadata
+  corrective_agent.py  Builds strict/smart prompts, validates answers, retries on grounding failure, cleans model artifacts
+  models.py            Workspace, result, and answer-mode helpers
+```
+
+Future clean pipeline direction:
 
 ```text
 backend/
@@ -585,6 +660,53 @@ CLI test:
 ```bash
 python backend/local_pilot_cli.py "C:\Path\To\FileOrFolder"
 ```
+
+Ask API examples:
+
+```bash
+curl -X POST http://127.0.0.1:8000/ask ^
+  -H "Content-Type: application/json" ^
+  -d "{\"path\":\"C:\\Path\\To\\report.docx\",\"question\":\"What is this file about?\",\"answer_mode\":\"selected_files_only\"}"
+```
+
+```bash
+curl -X POST http://127.0.0.1:8000/ask ^
+  -H "Content-Type: application/json" ^
+  -d "{\"path\":\"C:\\Path\\To\\resume.pdf\",\"question\":\"Is this good for AI engineer roles?\",\"answer_mode\":\"files_ai_knowledge\"}"
+```
+
+`answer_mode` is optional. Invalid or missing values fall back to:
+
+```text
+selected_files_only
+```
+
+Supported values:
+
+```text
+selected_files_only
+files_ai_knowledge
+```
+
+## Verification Snapshot
+
+The current slice was tested with:
+
+```text
+python -m compileall backend
+```
+
+Smoke-tested scenarios:
+
+- DOCX report in `Selected Files Only`
+- DOCX report in `Files + AI Knowledge`
+- resume PDF in `Selected Files Only`
+- resume PDF in `Files + AI Knowledge`
+- PPTX in `Selected Files Only`
+- code file in `Selected Files Only`
+- folder in `Selected Files Only`
+- invalid answer mode fallback
+- selected-file chat history isolation
 
 ## Roadmap
 
