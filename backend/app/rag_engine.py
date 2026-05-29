@@ -23,14 +23,14 @@ TOP_K = 10
 MAX_CONTEXT_CHARS = 14_000
 
 
-def answer_with_rag(path: str, question: str) -> dict:
-    return answer_workspace([path], question)
+def answer_with_rag(path: str, question: str, answer_mode: str = "selected_files_only") -> dict:
+    return answer_workspace([path], question, answer_mode=answer_mode)
 
 
-def answer_workspace(paths: list[str], question: str) -> dict:
+def answer_workspace(paths: list[str], question: str, answer_mode: str = "selected_files_only") -> dict:
     from .agentic_rag import answer
 
-    return answer(paths, question)
+    return answer(paths, question, answer_mode=answer_mode)
 
 
 def _answer_workspace_legacy(paths: list[str], question: str) -> dict:

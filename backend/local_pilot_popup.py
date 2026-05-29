@@ -33,6 +33,7 @@ class LocalPilotPopup:
         self.root.geometry("1120x760")
         self.root.minsize(900, 620)
         self.root.configure(bg="#f5f7fb")
+        self.answer_mode = tk.StringVar(value="selected_files_only")
 
         self.colors = {
             "bg": "#f5f7fb",
@@ -249,6 +250,32 @@ class LocalPilotPopup:
             pady=6,
         )
         self.provider_badge.grid(row=0, column=0, sticky="e")
+
+        mode_frame = tk.Frame(provider_area, bg=self.colors["bg"])
+        mode_frame.grid(row=1, column=0, sticky="e", pady=(8, 0))
+        for index, (label, value) in enumerate(
+            (
+                ("Selected Files Only", "selected_files_only"),
+                ("Files + AI Knowledge", "files_ai_knowledge"),
+            )
+        ):
+            tk.Radiobutton(
+                mode_frame,
+                text=label,
+                value=value,
+                variable=self.answer_mode,
+                indicatoron=False,
+                font=("Segoe UI", 8, "bold"),
+                fg=self.colors["brand"],
+                bg="#eef4ff",
+                activebackground="#dbeafe",
+                activeforeground=self.colors["brand_dark"],
+                selectcolor="#dbeafe",
+                relief=tk.FLAT,
+                padx=8,
+                pady=5,
+                command=self._refresh_mode_view,
+            ).grid(row=0, column=index, sticky="e", padx=(0, 6) if index == 0 else (0, 0))
 
         context_card = tk.Frame(
             main,
@@ -662,15 +689,23 @@ class LocalPilotPopup:
         return f"{provider.title()} | {model}"
 
     def _privacy_text(self) -> str:
+        mode_text = (
+            "Selected-files-only mode"
+            if self.answer_mode.get() == "selected_files_only"
+            else "Files + AI knowledge mode"
+        )
         if self.settings.model_provider == "ollama":
-            return "Local mode: selected context stays on this computer"
+            return f"{mode_text}: local Ollama keeps selected context on this computer"
         if self.settings.model_provider == "auto" and not self.settings.allow_cloud_fallback:
-            return "Auto mode: local first, cloud fallback off"
-        return "Cloud mode: selected chunks may be sent to the provider"
+            return f"{mode_text}: auto uses local first, cloud fallback off"
+        return f"{mode_text}: selected chunks may be sent to the provider"
 
     def _refresh_settings_view(self) -> None:
         self.settings = get_settings()
         self.provider_badge.configure(text=self._provider_badge_text())
+        self.privacy_label.configure(text=self._privacy_text())
+
+    def _refresh_mode_view(self) -> None:
         self.privacy_label.configure(text=self._privacy_text())
 
     def _open_setup(self) -> None:
@@ -1206,12 +1241,13 @@ class LocalPilotPopup:
         self._append("You", question)
         self._set_busy(True)
 
-        thread = threading.Thread(target=self._answer_in_background, args=(question,), daemon=True)
+        answer_mode = self.answer_mode.get()
+        thread = threading.Thread(target=self._answer_in_background, args=(question, answer_mode), daemon=True)
         thread.start()
 
-    def _answer_in_background(self, question: str) -> None:
+    def _answer_in_background(self, question: str, answer_mode: str) -> None:
         try:
-            result = answer_question(self.selected_path, question)
+            result = answer_question(self.selected_path, question, answer_mode=answer_mode)
             self.messages.put(("Local Pilot", result["answer"]))
         except Exception as exc:
             self.messages.put(("Local Pilot", f"Something went wrong:\n{exc}"))

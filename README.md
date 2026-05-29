@@ -26,6 +26,7 @@ Currently implemented:
 - Local SQLite memory for indexed chunks and chat history
 - Per-file and workspace-style answering
 - Agentic RAG engine module with ingestion, hybrid retrieval, corrective validation, and retry orchestration
+- Answer mode router: `Selected Files Only` for strict RAG and `Files + AI Knowledge` for selected context plus model knowledge
 - Source references for answers
 
 Not yet included:
@@ -595,6 +596,7 @@ python backend/local_pilot_cli.py "C:\Path\To\FileOrFolder"
 - Local memory
 - Ollama/local model answering
 - Optional cloud providers
+- Selected Files Only / Files + AI Knowledge mode switch
 
 ### Stage 2: Strong RAG Engine
 

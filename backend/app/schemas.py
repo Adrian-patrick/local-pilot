@@ -4,12 +4,17 @@ from pydantic import BaseModel, Field
 class AskRequest(BaseModel):
     path: str = Field(..., description="Selected file or folder path")
     question: str = Field(..., min_length=1)
+    answer_mode: str | None = Field(
+        default="selected_files_only",
+        description="selected_files_only or files_ai_knowledge",
+    )
 
 
 class AskResponse(BaseModel):
     answer: str
     selected_path: str
     sources: list[str]
+    answer_mode: str = "selected_files_only"
 
 
 class ContextResponse(BaseModel):

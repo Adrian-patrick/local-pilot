@@ -4,7 +4,7 @@ import re
 
 from ..llm import LLMError, generate_text
 from ..rag.retriever import terms
-from .models import AgentResult, WorkspaceState
+from .models import AgentResult, SMART_MODE, STRICT_MODE, WorkspaceState, normalize_answer_mode
 
 
 MAX_CONTEXT_CHARS = 14_000
@@ -17,8 +17,10 @@ def answer_with_correction(
     chunks: list[dict],
     history: list[dict],
     workspace: WorkspaceState,
+    answer_mode: str = STRICT_MODE,
 ) -> AgentResult:
-    prompt = _build_prompt(question, chunks, history, workspace)
+    mode = normalize_answer_mode(answer_mode)
+    prompt = _build_prompt(question, chunks, history, workspace, mode)
     try:
         answer = generate_text(prompt)
     except LLMError as exc:
@@ -28,7 +30,7 @@ def answer_with_correction(
             sources=_sources(chunks),
         )
 
-    verdict, reason = validate_answer(answer, chunks)
+    verdict, reason = validate_answer(answer, chunks, mode)
     retry_count = 0
     while verdict == "FAIL" and retry_count < MAX_RETRIES:
         retry_count += 1
@@ -36,23 +38,26 @@ def answer_with_correction(
             prompt
             + "\n\nYour previous answer failed grounding validation.\n"
             + f"Reason: {reason}\n"
-            + "Rewrite the answer using only the selected workspace chunks. "
-            + "If the chunks do not contain the answer, say you do not see it."
+            + _retry_instruction(mode)
         )
         try:
             answer = generate_text(retry_prompt)
         except LLMError:
             break
-        verdict, reason = validate_answer(answer, chunks)
+        verdict, reason = validate_answer(answer, chunks, mode)
 
+    answer = _clean_model_artifacts(answer, mode)
     validation = verdict if retry_count == 0 else f"{verdict}_AFTER_{retry_count}_RETRY"
     return AgentResult(answer=answer, validation=validation, sources=_sources(chunks))
 
 
-def validate_answer(answer: str, chunks: list[dict]) -> tuple[str, str]:
+def validate_answer(answer: str, chunks: list[dict], answer_mode: str = STRICT_MODE) -> tuple[str, str]:
     lowered = answer.lower()
     if "i don't see" in lowered or "not in the selected" in lowered:
         return "PASS", "Answer says context does not contain the information."
+
+    if normalize_answer_mode(answer_mode) == SMART_MODE:
+        return "PASS", "Smart mode permits general model knowledge with selected-file grounding instructions."
 
     context_terms = set(terms(" ".join(chunk["text"] for chunk in chunks)))
     answer_terms = {term for term in terms(answer) if len(term) >= 5}
@@ -66,18 +71,25 @@ def validate_answer(answer: str, chunks: list[dict]) -> tuple[str, str]:
     return "PASS", "Answer appears grounded."
 
 
-def _build_prompt(question: str, chunks: list[dict], history: list[dict], workspace: WorkspaceState) -> str:
+def _build_prompt(
+    question: str,
+    chunks: list[dict],
+    history: list[dict],
+    workspace: WorkspaceState,
+    answer_mode: str,
+) -> str:
+    mode_policy = _mode_policy(answer_mode)
     return (
         "You are Local Pilot, a source-grounded agentic RAG assistant.\n"
-        "Use ONLY the selected workspace chunks below.\n"
         "First infer the selected content type: document, report, resume, slides, spreadsheet, code, notes, folder, or repository.\n"
         "Then answer the user according to that content type.\n"
-        "Do not use outside knowledge in Strict Sources mode.\n"
-        "If the selected chunks do not contain the answer, say: \"I don't see that in the selected workspace.\"\n"
+        f"{mode_policy}\n"
         "Prefer concise answers with bullets when helpful.\n"
         "Mention evidence from the selected file when useful.\n"
+        "Never output fake tool calls, tool_code blocks, or markdown code fences unless the user explicitly asks for code.\n"
         "For code, explain only files/functions/flows visible in the chunks.\n"
         "For documents, answer from the document content, not from assumptions about the file name.\n\n"
+        f"Answer mode: {answer_mode}\n\n"
         f"Intent instructions:\n{_intent_instructions(question)}\n\n"
         f"Workspace: {workspace.title}\n"
         f"Selection type: {workspace.selection_type}\n"
@@ -86,6 +98,42 @@ def _build_prompt(question: str, chunks: list[dict], history: list[dict], worksp
         f"Retrieved source chunks:\n{_format_chunks(chunks)}\n\n"
         f"Question: {question}\n\n"
         "Answer:"
+    )
+
+
+def _mode_policy(answer_mode: str) -> str:
+    if answer_mode == SMART_MODE:
+        return (
+            "Mode: Files + AI Knowledge.\n"
+            "Use the selected chunks as the primary facts. You may also use general pretrained model knowledge "
+            "for explanations, recommendations, comparisons, and improvements.\n"
+            "Start the answer exactly with these three headings, in this order:\n"
+            "From selected file:\n"
+            "- Only factual points found in the selected chunks. No advice in this section.\n"
+            "AI knowledge / suggestions:\n"
+            "- General reasoning, best practices, comparisons, improvements, or advice.\n"
+            "Next steps:\n"
+            "- Concrete recommended actions.\n"
+            "Do not write an introduction before 'From selected file:'.\n"
+            "Do not copy internal chunk labels such as 'Retrieved source chunks', 'Source:', or 'Chunk' into the answer.\n"
+            "Never invent facts about the selected file; label outside advice as model knowledge or suggestions."
+        )
+    return (
+        "Mode: Selected Files Only.\n"
+        "Use ONLY the selected workspace chunks below. Do not use outside knowledge.\n"
+        "If the selected chunks do not contain the answer, say: \"I don't see that in the selected workspace.\""
+    )
+
+
+def _retry_instruction(answer_mode: str) -> str:
+    if answer_mode == SMART_MODE:
+        return (
+            "Rewrite the answer so all file-specific claims are supported by selected chunks. "
+            "Move any outside reasoning into an 'AI knowledge / suggestions' section and do not invent file facts."
+        )
+    return (
+        "Rewrite the answer using only the selected workspace chunks. "
+        "If the chunks do not contain the answer, say you do not see it."
     )
 
 
@@ -135,6 +183,26 @@ def _format_paths(paths: list[str]) -> str:
 
 def _sources(chunks: list[dict]) -> list[str]:
     return sorted({chunk["source"] for chunk in chunks})
+
+
+def _clean_model_artifacts(answer: str, answer_mode: str) -> str:
+    cleaned = re.sub(r"```tool_code\s*([\s\S]*?)```", r"\1", answer).strip()
+    cleaned = re.sub(r"(?im)^print\((['\"])(.*?)\1\)\s*$", r"\2", cleaned)
+    if answer_mode == SMART_MODE:
+        match = re.search(r"(?i)\bfrom selected file\s*:", cleaned)
+        if match and match.start() > 0:
+            cleaned = cleaned[match.start() :].lstrip()
+        if not re.search(r"(?i)\bfrom selected file\s*:", cleaned):
+            cleaned = (
+                "From selected file:\n"
+                "- Relevant chunks from the selected file/workspace were used as the grounding context.\n\n"
+                "AI knowledge / suggestions:\n"
+                f"{cleaned}\n\n"
+                "Next steps:\n"
+                "- Review the suggestions against the selected file.\n"
+                "- Ask a more specific follow-up if you want edits, risks, action items, or a rewritten version."
+            )
+    return cleaned
 
 
 def append_source_note(answer: str, chunks: list[dict]) -> str:

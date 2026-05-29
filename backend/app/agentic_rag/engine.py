@@ -3,10 +3,12 @@ from __future__ import annotations
 from ..rag_store import connect, load_workspace_chunks, load_workspace_history, save_message
 from .corrective_agent import append_source_note, answer_with_correction
 from .ingestion import collect_and_index
+from .models import normalize_answer_mode
 from .retriever import retrieve
 
 
-def answer(paths: list[str], question: str) -> dict:
+def answer(paths: list[str], question: str, answer_mode: str = "selected_files_only") -> dict:
+    mode = normalize_answer_mode(answer_mode)
     workspace, _extracted_text = collect_and_index(paths)
 
     with connect() as con:
@@ -27,6 +29,7 @@ def answer(paths: list[str], question: str) -> dict:
                 chunks=retrieved,
                 history=history,
                 workspace=workspace,
+                answer_mode=mode,
             )
             answer_text = append_source_note(result.answer, retrieved)
             sources = result.sources
@@ -40,6 +43,7 @@ def answer(paths: list[str], question: str) -> dict:
         "answer": answer_text,
         "selected_path": workspace.selection_label,
         "sources": sources,
+        "answer_mode": mode,
     }
 
 

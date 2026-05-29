@@ -114,7 +114,7 @@ def context(path: str) -> dict:
 @app.post("/ask", response_model=AskResponse)
 def ask(request: AskRequest) -> dict:
     try:
-        return answer_question(request.path, request.question)
+        return answer_question(request.path, request.question, answer_mode=request.answer_mode or "selected_files_only")
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
