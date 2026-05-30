@@ -297,12 +297,16 @@ class AppWindow(ctk.CTk):
                 # because the agent can read files itself.
                 query = prompt.split("Question:")[-1].strip() if "Question:" in prompt else prompt
                 base_dir = os.path.dirname(self._file_path) if self._file_path else os.getcwd()
+                clean_model = model.split("groq:")[-1] if model.startswith("groq:") else model
                 
-                orchestrator = AgentOrchestrator(model=model, base_dir=base_dir)
+                # Persist the orchestrator instance to maintain agent conversation history
+                if not hasattr(self, "_orchestrator") or self._orchestrator is None or self._orchestrator.model != clean_model:
+                    self._orchestrator = AgentOrchestrator(model=clean_model, base_dir=base_dir)
+                    
                 def handle_rate_limit(limits):
                     self._current_rate_limits = limits
                     
-                for token in orchestrator.run(query, on_rate_limit=handle_rate_limit):
+                for token in self._orchestrator.run(query, on_rate_limit=handle_rate_limit):
                     self._ask_section.append_response(token)
             else:
                 # Standard single-shot mode
