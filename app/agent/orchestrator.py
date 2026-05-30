@@ -119,17 +119,30 @@ class AgentOrchestrator:
                     action_name = action_match.group(1).strip()
                     input_str = input_match.group(1).strip()
                     
-                    # Fix LLM JSON formatting quirks (trailing backticks, braces)
-                    start_idx = input_str.find('{')
-                    end_idx = input_str.rfind('}')
-                    if start_idx != -1 and end_idx != -1:
-                        input_str = input_str[start_idx:end_idx+1]
-
                     yield f"\n\n🔧 [Executing: {action_name}]\n"
 
                     try:
+                        args = None
                         # strict=False allows unescaped literal newlines inside JSON strings
-                        args = json.loads(input_str, strict=False)
+                        try:
+                            args = json.loads(input_str, strict=False)
+                        except json.JSONDecodeError:
+                            # Fallback: keep removing characters from the end until it parses
+                            # (solves the extra `} }` garbage issue)
+                            temp_str = input_str
+                            while temp_str:
+                                try:
+                                    args = json.loads(temp_str, strict=False)
+                                    break
+                                except json.JSONDecodeError:
+                                    temp_str = temp_str[:-1]
+                                    while temp_str and not temp_str.endswith('}'):
+                                        temp_str = temp_str[:-1]
+                            
+                            if args is None:
+                                # If it completely fails, raise original error to let it retry
+                                raise json.JSONDecodeError("Extra data", input_str, 0)
+
                         # Resolve paths properly (handles both absolute and relative)
                         if "directory" in args:
                             args["directory"] = self._resolve_path(args["directory"])

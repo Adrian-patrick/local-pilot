@@ -1,0 +1,3 @@
+@echo off
+echo Running Local Pilot test suite...
+.venv\Scripts\python -m pytest tests/ -v
