@@ -22,7 +22,7 @@ from app.system_detector import detect_system
 
 log = logging.getLogger(__name__)
 
-OLLAMA_BASE_URL = "http://localhost:11434"
+OLLAMA_BASE_URL = "http://127.0.0.1:11434"
 CONNECT_TIMEOUT = 3.0  # seconds — fast fail for status checks
 GENERATE_TIMEOUT = 300.0  # seconds — generous for local LLM inference
 PULL_TIMEOUT = 600.0  # seconds — model downloads can take a while
