@@ -255,7 +255,7 @@ class AskSection(ctk.CTkFrame):
             self._token_buffer.append(token)
             if not self._flush_pending:
                 self._flush_pending = True
-                self.after(50, self._flush_tokens)
+                self.after(10, self._flush_tokens)
 
     def _flush_tokens(self):
         """Flush buffered tokens to the UI."""

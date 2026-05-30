@@ -118,6 +118,12 @@ class AgentOrchestrator:
                 if action_match and input_match:
                     action_name = action_match.group(1).strip()
                     input_str = input_match.group(1).strip()
+                    
+                    # Fix LLM JSON formatting quirks (trailing backticks, braces)
+                    start_idx = input_str.find('{')
+                    end_idx = input_str.rfind('}')
+                    if start_idx != -1 and end_idx != -1:
+                        input_str = input_str[start_idx:end_idx+1]
 
                     yield f"\n\n🔧 [Executing: {action_name}]\n"
 
