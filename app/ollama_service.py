@@ -176,17 +176,25 @@ def auto_select_and_ensure_model(
     if not ensure_ollama_running():
         return None
 
-    # Fast path: check if any target model is already available to skip slow hardware detection
+    # Fast path: if ANY model is already downloaded, just use it.
     try:
         available = get_ollama_models()
-        for target in ["qwen3:latest", "qwen2.5:3b", "phi3:3.8b", "qwen2.5:1.5b", "qwen2.5:14b"]:
-            if target in available:
-                log.info("Fast path: Model %s is already available.", target)
-                return target
+        if available:
+            # Prefer these fast models if they exist, otherwise pick the first one
+            preferred = ["gemma3:4b", "llama3.2:3b", "qwen3:8b", "phi4-mini", "qwen3:latest", "qwen2.5:3b"]
+            for target in preferred:
+                if target in available:
+                    log.info("Fast path: Model %s is already available.", target)
+                    return target
+            
+            # Just pick the first available model
+            selected = available[0]
+            log.info("Fast path: Using available model %s.", selected)
+            return selected
     except (ConnectionError, RuntimeError) as exc:
         log.warning("Could not query models for fast path: %s", exc)
 
-    # Slow path
+    # Slow path (only runs if NO models are installed)
     sys_info = detect_system()
     recommended = sys_info.recommended_model
     log.info(
@@ -196,19 +204,6 @@ def auto_select_and_ensure_model(
         sys_info.gpu_vram_gb,
         sys_info.total_ram_gb,
     )
-
-    # Check if already available
-    try:
-        available = get_ollama_models()
-        if recommended in available:
-            log.info("Model %s is already available.", recommended)
-            return recommended
-
-        # We just use the recommended model
-
-
-    except (ConnectionError, RuntimeError) as exc:
-        log.warning("Could not query models: %s", exc)
 
     # Pull the recommended model
     if progress_callback:
@@ -228,6 +223,49 @@ def auto_select_and_ensure_model(
             return fallback
 
     return None
+
+
+# ── LLM Inference ─────────────────────────────────────────────────────────
+
+def ask_ollama_stream_messages(model: str, messages: list[dict]) -> Generator[str, None, None]:
+    """Stream tokens from Ollama using the /api/chat endpoint with message roles.
+    
+    Yields:
+        Individual token strings as they arrive.
+    """
+    payload = {
+        "model": model,
+        "messages": messages,
+        "stream": True,
+    }
+
+    try:
+        with httpx.stream(
+            "POST",
+            f"{OLLAMA_BASE_URL}/api/chat",
+            json=payload,
+            timeout=httpx.Timeout(GENERATE_TIMEOUT, connect=CONNECT_TIMEOUT),
+        ) as response:
+            if response.status_code != 200:
+                raise RuntimeError(
+                    f"Ollama returned error status: {response.status_code}"
+                )
+
+            for line in response.iter_lines():
+                if not line:
+                    continue
+                try:
+                    data = json.loads(line)
+                    token = data.get("message", {}).get("content", "")
+                    if token:
+                        yield token
+                    if data.get("done", False):
+                        return
+                except json.JSONDecodeError:
+                    continue
+
+    except (httpx.ConnectError, httpx.TimeoutException) as exc:
+        raise ConnectionError(f"Failed to connect to Ollama: {exc}") from exc
 
 
 # ── LLM Inference ─────────────────────────────────────────────────────────

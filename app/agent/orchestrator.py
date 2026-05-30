@@ -8,13 +8,16 @@ from typing import Iterator
 from app.agent.prompts import build_react_system_prompt
 from app.agent.tools import AVAILABLE_TOOLS
 from app import groq_service
+from app import ollama_service
 
 log = logging.getLogger(__name__)
 
 
 class AgentOrchestrator:
     def __init__(self, model: str, base_dir: str):
-        self.model = model
+        self.is_groq = model.startswith("groq:")
+        self.model = model.split("groq:")[1] if self.is_groq else model
+        
         self.base_dir = os.path.abspath(base_dir)
         self.api_key = os.getenv("groq_api_key") or os.getenv("GROQ_API_KEY")
         self.system_prompt = build_react_system_prompt(self.base_dir)
@@ -39,12 +42,9 @@ class AgentOrchestrator:
 
     def run(self, task: str, on_rate_limit=None) -> Iterator[str]:
         """Runs the ReAct loop until 'Final Answer' is reached."""
-        if not self.api_key:
-            yield "[Error: Groq API key required for Agent Mode]\n"
+        if self.is_groq and not self.api_key:
+            yield "[Error: Groq API key required for Cloud Agent Mode]\n"
             return
-
-        if self.model.startswith("groq:"):
-            self.model = self.model.split("groq:")[1]
 
         # Add the user's task as a proper user message
         self.messages.append({"role": "user", "content": task})
@@ -64,9 +64,16 @@ class AgentOrchestrator:
             retry_count = 0
             while retry_count < max_retries:
                 try:
-                    for token in groq_service.ask_groq_stream_messages(
-                        self.model, self.messages, self.api_key, on_rate_limit
-                    ):
+                    if self.is_groq:
+                        stream = groq_service.ask_groq_stream_messages(
+                            self.model, self.messages, self.api_key, on_rate_limit
+                        )
+                    else:
+                        stream = ollama_service.ask_ollama_stream_messages(
+                            self.model, self.messages
+                        )
+                        
+                    for token in stream:
                         current_response += token
                         yield token
 
