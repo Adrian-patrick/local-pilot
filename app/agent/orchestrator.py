@@ -111,9 +111,9 @@ class AgentOrchestrator:
                 return  # Task complete
 
             if action_found:
-                # Parse action and input
+                # Parse action and input using DOTALL to handle multiline JSON strings
                 action_match = re.search(r"Action:\s*(.+)", current_response)
-                input_match = re.search(r"Action Input:\s*(.+)", current_response)
+                input_match = re.search(r"Action Input:\s*(.*?)(?:\nPAUSE|\Z)", current_response, re.DOTALL)
 
                 if action_match and input_match:
                     action_name = action_match.group(1).strip()
@@ -128,7 +128,8 @@ class AgentOrchestrator:
                     yield f"\n\n🔧 [Executing: {action_name}]\n"
 
                     try:
-                        args = json.loads(input_str)
+                        # strict=False allows unescaped literal newlines inside JSON strings
+                        args = json.loads(input_str, strict=False)
                         # Resolve paths properly (handles both absolute and relative)
                         if "directory" in args:
                             args["directory"] = self._resolve_path(args["directory"])

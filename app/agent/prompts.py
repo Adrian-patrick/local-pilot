@@ -32,6 +32,7 @@ Final Answer: [your complete, detailed response]
 - ALWAYS use absolute Windows paths: e.g. {working_dir}\\filename.txt
 - In JSON, escape backslashes: "C:\\\\Users\\\\adria\\\\Desktop\\\\folder"
 - NEVER use relative paths like "./"
+- If the user asks you to create a file in a specific folder, PAY ATTENTION and use that exact folder. Do not put it in a subfolder unless requested.
 
 ## Quality Standards — THIS IS CRITICAL
 
