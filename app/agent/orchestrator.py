@@ -25,6 +25,7 @@ class AgentOrchestrator:
         self.messages: list[dict] = [
             {"role": "system", "content": self.system_prompt}
         ]
+        self.tools_used = set()
 
     def _resolve_path(self, path: str) -> str:
         """Resolve a path. If it's already absolute, use it as-is. Otherwise join with base_dir."""
@@ -108,6 +109,16 @@ class AgentOrchestrator:
             self.messages.append({"role": "assistant", "content": current_response})
 
             if "Final Answer:" in current_response:
+                # Interception logic: prevent agent from skipping file creation
+                task_requires_file = any(word in task.lower() for word in ["create", "write", "save", "make a file"])
+                if task_requires_file and "write_file" not in self.tools_used:
+                    interception_msg = "\n\n🚨 [System Interception: You attempted to finish the task, but you have not written any files to the disk yet. You MUST use the `write_file` tool to complete this task.]\n"
+                    yield interception_msg
+                    
+                    # Feed the interception back as a simulated observation so the agent corrects itself
+                    self.messages.append({"role": "user", "content": "Observation: System Error - You forgot to use the `write_file` tool. Outputting markdown in chat does not save a file. Please use the `write_file` tool now."})
+                    continue
+                
                 return  # Task complete
 
             if action_found:
@@ -150,6 +161,7 @@ class AgentOrchestrator:
                             args["file_path"] = self._resolve_path(args["file_path"])
 
                         if action_name in AVAILABLE_TOOLS:
+                            self.tools_used.add(action_name)
                             result = AVAILABLE_TOOLS[action_name](**args)
                         else:
                             result = f"Error: Unknown tool '{action_name}'. Available tools: {list(AVAILABLE_TOOLS.keys())}"

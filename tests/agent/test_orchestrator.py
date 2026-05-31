@@ -78,3 +78,36 @@ PAUSE'''
     
     # Verify the tool was called with the correctly parsed multiline args
     mock_tool["write_file"].assert_called_once_with(file_path="C:\\test\\file.txt", content="Line 1\nLine 2")
+
+
+def test_interception_logic(mocker):
+    """Test that the agent intercepts premature Final Answer if file creation was requested."""
+    orch = AgentOrchestrator(model="test", base_dir="C:\\test")
+    
+    # Task explicitly asks to write a file
+    task = "create a summary file"
+    
+    # First response: agent tries to cheat and skip tools
+    cheat_response = "Thought: I'll just output text.\nFinal Answer: Here is the summary."
+    # Second response: agent complies and uses the tool
+    comply_response = "Thought: Oops.\nAction: write_file\nAction Input: {\"file_path\": \"test.txt\", \"content\": \"a\"}\nPAUSE"
+    # Third response: agent finishes
+    final_response = "Thought: Done.\nFinal Answer: File created."
+    
+    mocker.patch("app.ollama_service.ask_ollama_stream_messages", side_effect=[[cheat_response], [comply_response], [final_response]])
+    mock_tool = mocker.patch.dict("app.agent.orchestrator.AVAILABLE_TOOLS", {"write_file": mocker.MagicMock(return_value="Success")})
+    
+    # Run the loop and collect output
+    outputs = list(orch.run(task))
+    output_str = "".join(outputs)
+    
+    # Verify interception message was yielded
+    assert "System Interception" in output_str
+    assert "You MUST use the `write_file` tool" in output_str
+    
+    # Verify the tool was eventually called
+    mock_tool["write_file"].assert_called_once()
+    
+    # Verify that the system message was injected into the history
+    assert orch.messages[2]["content"] == cheat_response
+    assert "System Error" in orch.messages[3]["content"]
