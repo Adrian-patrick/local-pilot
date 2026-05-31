@@ -270,9 +270,6 @@ class AppWindow(ctk.CTk):
         if self._generation_thread and self._generation_thread.is_alive():
             return  # Already generating
 
-        # Build the prompt
-        prompt = build_prompt(self._metadata, self._file_content, query)
-
         # Update UI
         self._ask_section.append_user_message(query)
         self._ask_section.set_generating(True)
@@ -281,21 +278,19 @@ class AppWindow(ctk.CTk):
         # Run inference in background thread
         self._generation_thread = threading.Thread(
             target=self._run_inference,
-            args=(model, prompt),
+            args=(model, query),
             daemon=True,
         )
         self._generation_thread.start()
 
-    def _run_inference(self, model: str, prompt: str):
+    def _run_inference(self, model: str, query: str):
         """Run streaming inference in a background thread."""
         try:
             self._current_rate_limits = None
             
             # Use multi-agent orchestrator if Agent Mode is toggled
             if hasattr(self, "_ask_section") and self._ask_section.is_agent_mode():
-                # For Agent Mode, we only use the query, not the full built prompt which contains file context
-                # because the agent can read files itself.
-                query = prompt.split("Question:")[-1].strip() if "Question:" in prompt else prompt
+                # For Agent Mode, we use the raw query directly. The agent can read files itself.
                 base_dir = os.path.dirname(self._file_path) if self._file_path else os.getcwd()
                 clean_model = model.split("groq:")[-1] if model.startswith("groq:") else model
                 
@@ -310,6 +305,7 @@ class AppWindow(ctk.CTk):
                     self._ask_section.append_response(token)
             else:
                 # Standard single-shot mode
+                prompt = build_prompt(self._metadata, self._file_content, query)
                 if model.startswith("groq:"):
                     real_model = model.split("groq:")[1]
                     api_key = os.getenv("groq_api_key") or os.getenv("GROQ_API_KEY")
