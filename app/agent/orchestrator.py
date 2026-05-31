@@ -134,25 +134,18 @@ class AgentOrchestrator:
 
                     try:
                         args = None
-                        # strict=False allows unescaped literal newlines inside JSON strings
+                        
                         try:
-                            args = json.loads(input_str, strict=False)
-                        except json.JSONDecodeError:
-                            # Fallback: keep removing characters from the end until it parses
-                            # (solves the extra `} }` garbage issue)
-                            temp_str = input_str
-                            while temp_str:
-                                try:
-                                    args = json.loads(temp_str, strict=False)
-                                    break
-                                except json.JSONDecodeError:
-                                    temp_str = temp_str[:-1]
-                                    while temp_str and not temp_str.endswith('}'):
-                                        temp_str = temp_str[:-1]
-                            
-                            if args is None:
-                                # If it completely fails, raise original error to let it retry
-                                raise json.JSONDecodeError("Extra data", input_str, 0)
+                            # Use json_repair for robust parsing of malformed LLM JSON
+                            # It automatically fixes missing quotes, unescaped newlines, invalid escapes, and trailing commas
+                            import json_repair
+                            parsed = json_repair.repair_json(input_str, return_objects=True)
+                            if isinstance(parsed, dict):
+                                args = parsed
+                            else:
+                                raise ValueError("Parsed JSON is not an object")
+                        except Exception as repair_err:
+                            raise json.JSONDecodeError(f"json_repair failed: {repair_err}", input_str, 0)
 
                         # Resolve paths properly (handles both absolute and relative)
                         if "directory" in args:

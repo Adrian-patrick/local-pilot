@@ -7,3 +7,4 @@ pystray==0.19.5
 Pillow==11.1.0
 pytest==9.0.3
 pytest-mock==3.15.1
+json-repair==0.59.10
