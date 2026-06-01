@@ -1,44 +1,30 @@
-# Future Roadmap — Local Pilot
+# Local Pilot Roadmap
 
 ## Vision
 
 Local Pilot evolves from:
 
-> “Right Click → Ask Agent”
+> Right Click → Ask Agent
 
-into a deeply contextual operating-system-native AI layer.
+into an operating-system-native AI intelligence layer that understands projects, workflows, context, and user intent.
 
-The future system should feel less like a chatbot and more like:
+The goal is to feel less like a chatbot and more like:
 
-* an intelligent OS companion
-* a contextual workspace memory
-* a project-aware assistant
-* a lightweight autonomous productivity layer
-
----
-
-# 🚀 Current Progress: Stage 2 Achieved!
-
-Many of the long-term goals outlined in this document have already been realized in our most recent architectural overhaul:
-
-- **[COMPLETED] Background Runtime & Taskbar Presence**: Local Pilot now runs as a background daemon with a Windows System Tray icon, providing instant startup speeds and zero-latency context menus.
-- **[COMPLETED] Complex Planning & Autonomous Tasks**: We have successfully integrated a ReAct-based **Multi-Agent Orchestrator**. Local Pilot can now explore directories, read files, and write documentation completely autonomously using the Groq cloud integration.
-- **[IN PROGRESS] Project Initialization (`pilot init`)**: The foundation is laid for local project memory.
-
----
-
-# Core Future Capabilities
+* Intelligent OS companion
+* Context-aware workspace memory
+* Project-aware assistant
+* Lightweight autonomous productivity layer
 
 ---
 
 # 1. Screen Context Awareness
 
-Local Pilot should understand what is currently happening on the user’s screen.
+Local Pilot should understand what is happening on the user's screen.
 
 ## Capabilities
 
 * Detect active window
-* Understand visible application context
+* Understand application context
 * Read selected text
 * Analyze open documents
 * Understand IDE/editor state
@@ -49,191 +35,124 @@ Local Pilot should understand what is currently happening on the user’s screen
 
 ### IDE Context
 
-User is viewing authentication code.
+User:
 
-Ask:
-
-> “Explain what’s broken here”
+> Explain what's broken here
 
 Local Pilot:
 
-* understands visible files
-* reads surrounding code
-* explains issue contextually
-
----
+* Understands visible files
+* Reads surrounding code
+* Explains issues contextually
 
 ### Browser Context
 
-User is reading documentation.
+User:
 
-Ask:
-
-> “Summarize this page”
+> Summarize this page
 
 Local Pilot:
 
-* understands current webpage
-* extracts relevant information
-* summarizes instantly
+* Understands current webpage
+* Extracts relevant information
+* Produces instant summaries
 
 ---
 
 # 2. Session & Chat History
 
-Local Pilot should maintain conversational continuity across sessions.
+Maintain continuity across sessions.
 
 ## Goals
 
 * Persistent conversations
-* Context-aware follow-up questions
+* Context-aware follow-ups
 * Project-specific memory
 * Resume previous workflows
 
 ## Capabilities
 
-* Store conversation history locally
-* Link chats to files/folders/projects
-* Retrieve previous discussions
-* Maintain short-term working memory
+* Local conversation history
+* Project-linked memory
+* Retrieval of past discussions
+* Short-term working memory
 * Session-aware reasoning
 
 ## Example
 
-User asks:
+User:
 
-> “Continue the architecture discussion from yesterday”
+> Continue the architecture discussion from yesterday
 
 Local Pilot restores:
 
-* prior repository context
-* previous explanations
-* architectural decisions
-* pending tasks
+* Repository context
+* Previous decisions
+* Discussion history
+* Pending tasks
 
 ---
 
-# 3. Simple Task Writing
+# 3. Task Extraction & Management
 
-Local Pilot should support lightweight task creation directly from context.
+Create actionable tasks directly from context.
 
 ## Examples
 
-From a document:
+### Documents
 
-> “Create TODOs from this meeting note”
+> Create TODOs from this meeting note
 
-From a codebase:
+### Codebases
 
-> “List refactoring tasks”
+> List refactoring tasks
 
-From a PDF:
+### PDFs
 
-> “Extract action items”
+> Extract action items
 
 ## Features
 
-* Quick task extraction
+* Task extraction
 * Checklists
 * Priority tagging
 * Due-date suggestions
-* Markdown task export
+* Markdown export
 
 ---
 
-# 4. Complex Planning & Multi-Step Reasoning
+# 4. User & Session Context
 
-Future versions should support deeper planning workflows.
+Adapt to both the user and the current workflow.
 
-## Capabilities
+## User Context
 
-* Break goals into subtasks
-* Create implementation plans
-* Generate execution roadmaps
-* Track dependencies
-* Maintain reasoning state across sessions
+Persistent preferences:
 
-## Examples
+* Coding style
+* Writing tone
+* Preferred frameworks
+* Repository preferences
+* Project conventions
+* Recurring workflows
 
-### Engineering Planning
+## Session Context
 
-Ask:
+Temporary working memory:
 
-> “Plan migration from REST to gRPC”
-
-Local Pilot generates:
-
-* architecture changes
-* implementation phases
-* risks
-* estimated effort
-* dependency mapping
-
----
-
-### Product Planning
-
-Ask:
-
-> “Plan MVP rollout for this project”
-
-Local Pilot generates:
-
-* milestones
-* technical tasks
-* UX considerations
-* deployment stages
-
----
-
-# 5. User-Specific & Session-Specific Context
-
-Local Pilot should adapt to both the user and the active workflow.
-
-## User-Specific Context
-
-Persistent preferences such as:
-
-* preferred coding style
-* writing tone
-* frequently used repositories
-* favorite frameworks
-* project conventions
-* recurring workflows
-
-## Session-Specific Context
-
-Temporary working memory such as:
-
-* currently active files
-* recent conversations
-* active tasks
-* current project focus
-* temporary notes
+* Active files
+* Recent conversations
+* Current tasks
+* Project focus
+* Temporary notes
 
 ## Goal
 
-Reduce repetitive prompting.
-
-The assistant should naturally remember:
-
-* what the user is doing
-* what project is active
-* what was recently discussed
+Reduce repetitive prompting and provide personalized assistance automatically.
 
 ---
 
-# 6. Project Initialization System (`pilot init`)
-
-Introduce a project-level initialization system similar to:
-
-```bash
-git init
-```
-
-but designed for AI context management.
-
----
+# 5. Project Initialization System
 
 ## Command
 
@@ -241,38 +160,11 @@ but designed for AI context management.
 pilot init
 ```
 
-inside a project folder.
+Initialize AI-aware project memory.
 
----
+## Generated Structure
 
-## Purpose
-
-Marks a folder as an AI-aware Local Pilot project.
-
-This creates a hidden configuration directory:
-
-```bash
-.pilot/
-```
-
-which stores:
-
-* project metadata
-* embeddings
-* summaries
-* architecture maps
-* session history
-* indexed files
-* project memory
-* documentation cache
-* task history
-* semantic search indexes
-
----
-
-## Example Structure
-
-```bash
+```text
 project/
 ├── .pilot/
 │   ├── config.json
@@ -284,157 +176,171 @@ project/
 │   └── tasks/
 ```
 
----
+## Stored Information
+
+* Project metadata
+* Embeddings
+* Architecture maps
+* Session history
+* Documentation cache
+* Semantic indexes
+* Task history
 
 ## Benefits
 
 ### Faster Context Loading
 
-No need to repeatedly scan the entire repository.
+Avoid repeated repository scans.
 
 ### Persistent Project Memory
 
-The project becomes continuously understandable over time.
+Projects become progressively understandable.
 
 ### Better Cross-File Reasoning
 
-The assistant can understand:
+Understand:
 
-* architecture
-* relationships
-* dependencies
-* workflows
+* Architecture
+* Dependencies
+* Relationships
+* Workflows
 
-### Shared Team Context (Future)
+### Future Team Context
 
-Potential future support:
+Potential support for:
 
-* team-shared AI memory
-* project onboarding
-* organization knowledge layers
-
----
-
-# 7. Background Runtime / Taskbar Presence
-
-Local Pilot should behave like a native operating system utility.
+* Shared AI memory
+* Team onboarding
+* Organization knowledge layers
 
 ---
 
-## Desired Behavior
+# 6. Intelligent Model Routing
 
-### If App Is Closed
+Automatically select the best model for each task.
 
-When the user clicks:
+## Goal
 
-> “Ask Local Pilot”
+Optimize:
 
-the application should automatically launch in the background.
+* Quality
+* Speed
+* Cost
+* Reasoning
+* Coding performance
 
-No manual startup required.
+without requiring manual model selection.
+
+## Coding Tasks
+
+Examples:
+
+* Code generation
+* Debugging
+* Refactoring
+* Repository analysis
+* Architecture reviews
+
+Preferred models:
+
+* Qwen Coder
+* DeepSeek Coder
+* Other coding-specialized models
+
+## Reasoning Tasks
+
+Examples:
+
+* Planning
+* Research
+* Documentation
+* Brainstorming
+* Summarization
+
+Preferred models:
+
+* Qwen3
+* Other reasoning-focused models
+
+## Hybrid Workflows
+
+Example:
+
+> Analyze this repository and create an implementation plan
+
+Execution:
+
+1. Coding model analyzes repository.
+2. Reasoning model creates roadmap.
+3. Results are merged into a unified response.
+
+## Architecture
+
+```text
+User Request
+      │
+      ▼
+Task Classifier
+      │
+ ┌────┴────┐
+ │         │
+ ▼         ▼
+Coding   Reasoning
+Model     Model
+ │         │
+ └────┬────┘
+      ▼
+Response Composer
+      ▼
+     User
+```
+
+## Benefits
+
+* Better task performance
+* Faster responses
+* Lower inference costs
+* Easy model upgrades
+* Vendor/model independence
 
 ---
 
-## System Tray / Taskbar Mode
-
-Local Pilot should run quietly in:
-
-* Windows system tray
-* macOS menu bar
-* Linux tray
-
----
-
-## Responsibilities of Background Runtime
-
-### Fast Response Startup
-
-Avoid cold-start delays.
-
-### Local Indexing
-
-Monitor indexed folders.
-
-### Memory Management
-
-Maintain:
-
-* embeddings
-* project cache
-* session memory
-
-### Lightweight Event Listening
-
-Watch for:
-
-* right-click events
-* file changes
-* active project changes
-
----
-
-## UX Goal
-
-The assistant should feel:
-
-* instant
-* native
-* invisible when idle
-* always available when needed
-
-Similar to:
-
-* Spotlight
-* Raycast
-* Alfred
-* system utilities
-
-rather than a traditional standalone chatbot app.
-
----
-
-# Long-Term Direction
-
-Local Pilot gradually evolves toward:
-
-## Stage 2
-
-* repository-wide memory
-* semantic retrieval
-* cross-file understanding
+# Long-Term Evolution
 
 ## Stage 3
 
-* workflow orchestration
-* app integrations
-* automation pipelines
+* Workflow orchestration
+* App integrations
+* Automation pipelines
+* Cross-tool execution
 
 ## Stage 4
 
-* proactive AI operating system
-* persistent contextual intelligence
-* autonomous execution layer
-* voice-native interaction
+* Proactive AI operating system
+* Persistent contextual intelligence
+* Autonomous execution layer
+* Voice-native interaction
+* Ambient assistance
 
 ---
 
-# Final Product Philosophy
+# Product Philosophy
 
-The future of Local Pilot is not:
+Local Pilot is not:
 
-> “another chatbot”
+> Another chatbot
 
-It is:
+Local Pilot is:
 
-> “an operating-system-native intelligence layer”
+> An operating-system-native intelligence layer
 
-where AI understands:
+that understands:
 
-* files
-* projects
-* workflows
-* screen context
-* history
-* intent
+* Files
+* Projects
+* Workflows
+* Screen context
+* History
+* Intent
 
-without forcing users into manual prompting workflows.
+while minimizing manual prompting and maximizing contextual understanding.
